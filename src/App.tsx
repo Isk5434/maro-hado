@@ -1,19 +1,21 @@
 import { useState } from 'react'
+import face from './assets/game/maroinu-face.jpg'
 import maroinu from './assets/game/maroinu.jpg'
 import { PLAYER_COLORS } from './components/colors'
 import { GameScreen } from './components/GameScreen'
 import { useStore } from './store'
+import { Tutorial, type TutorialMode } from './tutorial/Tutorial'
 
 const DEFAULT_NAMES = ['プレイヤー1', 'プレイヤー2', 'プレイヤー3', 'プレイヤー4']
 
-function Setup() {
+function Setup({ onLearn }: { onLearn: (m: TutorialMode) => void }) {
   const start = useStore((s) => s.start)
   const [count, setCount] = useState(4)
   const [names, setNames] = useState(DEFAULT_NAMES)
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-4 px-4 pt-4 pb-8">
-      <div className="overflow-hidden rounded-3xl bg-teal-board text-white shadow-lg">
+      <div className="overflow-hidden rounded-[4px] bg-teal-board text-white shadow-lg">
         <div className="relative">
           <img src={maroinu} alt="まろいぬ" className="aspect-[4/3] w-full object-cover object-[50%_25%]" />
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-teal-board via-teal-board/70 to-transparent px-5 pt-12 pb-3">
@@ -27,6 +29,37 @@ function Setup() {
           道カードで館とお殿様の城をつなごう。誰かがつないだらゲーム終了、得点の高い人の勝ち！
         </p>
       </div>
+
+      <section aria-labelledby="learn" className="flex flex-col gap-2">
+        <h2 id="learn" className="flex items-center gap-2 text-sm font-black text-stone-700">
+          はじめての人は、まずルールを
+          <span className="h-px flex-1 bg-stone-300" />
+        </h2>
+        <button
+          type="button"
+          onClick={() => onLearn('maro')}
+          className="group flex items-center gap-3 rounded-[4px] border-l-4 border-[#8b1e1e] bg-[#fffaf0] p-3 text-left shadow transition hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <img src={face} alt="" className="h-14 w-14 shrink-0 rounded-[4px] border-2 border-[#8b1e1e] object-cover transition group-hover:rotate-[-3deg]" />
+          <span className="min-w-0 flex-1">
+            <b className="block text-base text-stone-900">まろいぬに教わる</b>
+            <span className="text-xs text-stone-600">まろいぬがしゃべって、遊びながら案内するまろ</span>
+          </span>
+          <span className="text-xl text-[#8b1e1e] transition group-hover:translate-x-1">→</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onLearn('guide')}
+          className="group flex items-center gap-3 rounded-[4px] border-l-4 border-teal-board bg-white p-3 text-left shadow transition hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[4px] bg-teal-board text-2xl text-white">📖</span>
+          <span className="min-w-0 flex-1">
+            <b className="block text-base text-stone-900">ルールガイド</b>
+            <span className="text-xs text-stone-600">図を動かしながら、ルールブックの順に7章で</span>
+          </span>
+          <span className="text-xl text-teal-board transition group-hover:translate-x-1">→</span>
+        </button>
+      </section>
 
       <section className="rounded-[3px] bg-white p-4 shadow">
         <h2 className="mb-2 font-black">人数</h2>
@@ -71,5 +104,19 @@ function Setup() {
 
 export default function App() {
   const game = useStore((s) => s.game)
-  return game ? <GameScreen /> : <Setup />
+  const [learn, setLearn] = useState<TutorialMode | null>(null)
+  if (game) return <GameScreen />
+  if (learn)
+    return (
+      <Tutorial
+        key={learn}
+        mode={learn}
+        onClose={() => setLearn(null)}
+        onPlay={() => {
+          setLearn(null)
+          setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 50)
+        }}
+      />
+    )
+  return <Setup onLearn={setLearn} />
 }

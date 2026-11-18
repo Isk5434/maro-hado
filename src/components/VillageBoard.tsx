@@ -18,6 +18,14 @@ interface Props {
   freshPieces?: Set<string>
   /** 盤の縁の色（村の持ち主の色） */
   accent?: string
+  /** 説明中のマス。指定するとほかのマスを暗くする（ルール説明用） */
+  spotlight?: Set<string> | null
+  /** マスに添える小さなラベル（ルール説明用） */
+  labels?: Record<string, string>
+  /** 金色に光らせるマス（つながった道など） */
+  glow?: Set<string>
+  /** 揺らすマス（置けない場所を押したとき） */
+  shake?: string | null
   onCell?: (x: number, y: number) => void
 }
 
@@ -27,7 +35,7 @@ const TONE = {
   pick: { ring: 'ring-amber-300', fill: 'bg-amber-300/20' },
 } as const
 
-export function VillageBoard({ village, targets, fits, selected, targetTone = 'place', ghost, freshCards, freshPieces, accent, onCell }: Props) {
+export function VillageBoard({ village, targets, fits, selected, targetTone = 'place', ghost, freshCards, freshPieces, accent, spotlight, labels, glow, shake, onCell }: Props) {
   const tone = TONE[targetTone]
   return (
     <div
@@ -42,6 +50,7 @@ export function VillageBoard({ village, targets, fits, selected, targetTone = 'p
             const isTarget = !!targets?.has(key)
             const isSelected = !!selected?.has(key)
             const fitsNow = !fits || fits.has(key)
+            const lit = !!spotlight?.has(key)
             return (
               <button
                 key={key}
@@ -50,7 +59,7 @@ export function VillageBoard({ village, targets, fits, selected, targetTone = 'p
                 onClick={() => onCell?.(x, y)}
                 className={`group relative aspect-square overflow-hidden rounded-[2px] outline-none transition-transform duration-150 ${
                   isSelected ? 'z-10 scale-95 ring-4 ring-amber-400' : isTarget ? `z-10 ring-2 ring-inset ${tone.ring} hover:scale-[1.04] active:scale-95` : ''
-                } ${isTarget || isSelected ? 'cursor-pointer' : 'cursor-default'}`}
+                } ${isTarget || isSelected ? 'cursor-pointer' : 'cursor-default'} ${lit ? 'z-20 ring-2 ring-amber-300' : ''} ${shake === key ? 'animate-shake' : ''}`}
                 aria-label={`(${x + 1},${y + 1})${isTarget && !fitsNow ? ' 回すと置ける' : ''}`}
               >
                 {cell.placed ? (
@@ -83,6 +92,13 @@ export function VillageBoard({ village, targets, fits, selected, targetTone = 'p
                   </>
                 )}
                 {isTarget && cell.placed && <span className={`absolute inset-0 animate-pulse ${tone.fill}`} />}
+                {glow?.has(key) && <span className="pointer-events-none absolute inset-0 animate-pulse bg-amber-300/35 shadow-[inset_0_0_10px_rgba(252,211,77,0.9)]" />}
+                {spotlight && !lit && <span className="pointer-events-none absolute inset-0 bg-[#0d2422]/60 transition-opacity duration-300" />}
+                {labels?.[key] && (
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 animate-fade truncate bg-black/70 px-0.5 py-px text-center text-[9px] leading-tight font-bold text-white sm:text-[11px]">
+                    {labels[key]}
+                  </span>
+                )}
               </button>
             )
           }),

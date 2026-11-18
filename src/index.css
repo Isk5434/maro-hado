@@ -64,3 +64,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }
+
+@keyframes talk {
+  from { transform: translateY(0) rotate(-1.5deg); }
+  to { transform: translateY(-2px) rotate(1.5deg); }
+}
