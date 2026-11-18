@@ -47,13 +47,14 @@ export const PIECE_COLOR: Record<PieceKind, string> = {
 }
 
 export function CardImage({ card, rot = 0, className = '' }: { card: Card; rot?: number; className?: string }) {
-  const turn = (((rot - (IMAGE_ROT[card.kind] ?? 0)) % 4) + 4) % 4
+  // 4で割らずに回すと、3→4(=0)のときも時計回りに動く
+  const turn = rot - (IMAGE_ROT[card.kind] ?? 0)
   return (
     <img
       src={CARD_IMAGE[card.kind]}
       alt={card.kind}
       draggable={false}
-      className={`block aspect-square select-none object-cover transition-transform duration-200 ${className}`}
+      className={`block aspect-square select-none object-cover transition-transform duration-300 ease-out ${className}`}
       style={{ transform: `rotate(${turn * 90}deg)` }}
     />
   )

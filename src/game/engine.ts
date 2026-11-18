@@ -416,6 +416,7 @@ export function placeHoldingCard(state: GameState, x: number, y: number, rot: nu
     const h = frontTask(s, 'place').holding
     const p = s.players[h.player]
     if (!h.card || !canPlaceCard(p.village, h.card, x, y)) throw new Error('そこには置けません')
+    if (!canPlaceCard(p.village, h.card, x, y, rot)) throw new Error('その向きでは道がつながりません。カードを回してください')
     p.village.cells[y][x].placed = { card: h.card, rot, piece: null }
     h.card = null
     h.fromSlot = undefined
@@ -462,6 +463,7 @@ export function playKeepCard(state: GameState, index: number, x: number, y: numb
     const p = s.players[s.current]
     const card = p.keepCards[index]
     if (!card || !canPlaceCard(p.village, card, x, y)) throw new Error('そこには置けません')
+    if (!canPlaceCard(p.village, card, x, y, rot)) throw new Error('その向きでは道がつながりません。カードを回してください')
     p.keepCards.splice(index, 1)
     p.village.cells[y][x].placed = { card, rot, piece: null }
     log(s, `${p.name}はキープの${CARD_NAMES[card.kind]}を置いた`)

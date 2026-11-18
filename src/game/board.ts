@@ -105,19 +105,47 @@ function isAnchor(v: Village, x: number, y: number): boolean {
   return false
 }
 
-/** カードを (x,y) に置けるか */
-export function canPlaceCard(v: Village, card: Card, x: number, y: number): boolean {
+/** 道のあるカード（直線・L・T・十字・宿場） */
+export function hasRoad(card: Card): boolean {
+  return BASE_OPENINGS[card.kind] !== undefined
+}
+
+/** 道カードを rot の向きで (x,y) に置いたとき、隣の道（館・置いたカード・起点になる砦）と1か所以上つながるか */
+function linksToRoad(v: Village, card: Card, x: number, y: number, rot: number): boolean {
+  const open = rotate(BASE_OPENINGS[card.kind], rot)
+  return [N, E, S, W].some((d) => {
+    if (!(open & d)) return false
+    const [dx, dy] = DIR_DELTA[d]
+    const nx = x + dx
+    const ny = y + dy
+    return inBounds(nx, ny) && isAnchor(v, nx, ny) && (cellOpenings(v.cells[ny][nx]) & opposite(d)) !== 0
+  })
+}
+
+/**
+ * カードを (x,y) に置けるか。rot を省くと「どれかの向きで置けるか」を返す。
+ * 道カードは隣の道と1か所以上つながる向きでしか置けない（2026-11-18 ユーザー決定）。農地は隣ならどこでも。
+ */
+export function canPlaceCard(v: Village, card: Card, x: number, y: number, rot?: number): boolean {
   if (!inBounds(x, y) || !isPlaceCard(card)) return false
   const cell = v.cells[y][x]
   if (cell.placed) return false
   if (cell.terrain === 'goal' || cell.terrain === 'start' || cell.terrain === 'fort') return false
   if (isWater(cell) && card.kind !== 'straight') return false
-  return neighbors4(x, y).some(([a, b]) => isAnchor(v, a, b))
+  if (!neighbors4(x, y).some(([a, b]) => isAnchor(v, a, b))) return false
+  if (!hasRoad(card)) return true
+  if (rot !== undefined) return linksToRoad(v, card, x, y, rot)
+  return [0, 1, 2, 3].some((r) => linksToRoad(v, card, x, y, r))
 }
 
-export function placeableCells(v: Village, card: Card): [number, number][] {
+/** そのマスで置ける向き（時計回りの回転数）。道の無いカードは全部 */
+export function validRotations(v: Village, card: Card, x: number, y: number): number[] {
+  return [0, 1, 2, 3].filter((r) => canPlaceCard(v, card, x, y, r))
+}
+
+export function placeableCells(v: Village, card: Card, rot?: number): [number, number][] {
   const out: [number, number][] = []
-  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (canPlaceCard(v, card, x, y)) out.push([x, y])
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (canPlaceCard(v, card, x, y, rot)) out.push([x, y])
   return out
 }
 

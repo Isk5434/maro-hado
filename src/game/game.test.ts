@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canPlaceCard, createVillage, floodCells, isConnected, passesFort, placeableCells, rotate } from './board'
+import { canPlaceCard, createVillage, floodCells, isConnected, passesFort, placeableCells, rotate, validRotations } from './board'
 import {
   CARD_COUNTS,
   canChangeSet,
@@ -38,10 +38,36 @@ describe('盤面', () => {
     expect(canPlaceCard(v, card('farm'), 6, 2)).toBe(false)
   })
 
-  it('道はつながっていなくても隣なら置ける', () => {
+  it('道カードは隣の道と1か所つながる向きでしか置けない', () => {
+    const v = createVillage()
+    // 館(7,3)の左(6,3): 直線は東西向き(rot1)なら館とつながる。南北(rot0)はつながらない
+    expect(canPlaceCard(v, card('straight'), 6, 3, 0)).toBe(false)
+    expect(canPlaceCard(v, card('straight'), 6, 3, 1)).toBe(true)
+    // L字(基準 N|E): 館の左なら E を含む向き rot0(N|E)・rot1(E|S) だけ
+    expect(validRotations(v, card('L'), 6, 3)).toEqual([0, 1])
+    // 農地は道が無いので向きに関係なく置ける
+    expect(validRotations(v, card('farm'), 6, 3)).toEqual([0, 1, 2, 3])
+  })
+
+  it('農地や行き止まりの隣には、道がつながらないので道カードを置けない', () => {
     const v = createVillage()
     put(v, 6, 3, 'farm')
-    expect(canPlaceCard(v, card('cross'), 6, 2)).toBe(true)
+    expect(canPlaceCard(v, card('cross'), 6, 2)).toBe(false) // 隣は農地と空きマスだけ
+    expect(canPlaceCard(v, card('farm'), 6, 2)).toBe(true)
+    put(v, 7, 2, 'straight', 1) // 館の上に東西の直線: 館とはつながらない向き
+    expect(canPlaceCard(v, card('straight'), 7, 1, 0)).toBe(false) // 南は直線の北(閉)
+    expect(canPlaceCard(v, card('straight'), 6, 2, 1)).toBe(true) // 東は直線の西(開)
+  })
+
+  it('置く操作でも向きを確かめる', () => {
+    let g = createGame(['A', 'B'], 12)
+    g = takeSet(g, takeableSlots(g)[0])
+    const ph = phaseOf(g)
+    if (ph.kind !== 'place') throw new Error('place のはず')
+    const c = ph.holding.card!
+    const v = g.players[0].village
+    const bad = [0, 1, 2, 3].find((r) => !canPlaceCard(v, c, 6, 3, r))
+    if (bad !== undefined) expect(() => placeHoldingCard(g, 6, 3, bad)).toThrow('向き')
   })
 
   it('GOAL・館・砦には置けない', () => {
@@ -64,6 +90,8 @@ describe('盤面', () => {
     expect(canPlaceCard(v, card('farm'), 2, 3)).toBe(false)
     put(v, 4, 3, 'farm')
     expect(canPlaceCard(v, card('farm'), 2, 3)).toBe(true)
+    // 砦は東西の道なので、西隣の道カードは東を向いていればつながる
+    expect(validRotations(v, card('straight'), 2, 3)).toEqual([1, 3])
   })
 
   it('館から GOAL まで道がつながると成立し、砦を通ると判定できる', () => {
@@ -185,8 +213,8 @@ describe('進行', () => {
     expect(ph.kind).toBe('place')
     if (ph.kind !== 'place') return
     const c = ph.holding.card!
-    const [x, y] = c.kind === 'straight' ? [6, 3] : [6, 3]
-    g = placeHoldingCard(g, x, y, c.kind === 'straight' ? 1 : 0)
+    const [x, y] = [6, 3]
+    g = placeHoldingCard(g, x, y, validRotations(g.players[0].village, c, x, y)[0])
     g = placeHoldingPiece(g, x, y)
     // 補充でイベントが出た場合は入力待ちになることがある
     while (!g.over && phaseOf(g).kind !== 'choose') {
@@ -223,7 +251,7 @@ describe('進行', () => {
     const ph = phaseOf(g)
     if (ph.kind !== 'place') throw new Error('place のはず')
     const [x, y] = placeableCellsFor(g, ph.holding.card!)
-    g = placeHoldingCard(g, x, y, 0)
+    g = placeHoldingCard(g, x, y, validRotations(g.players[g.current].village, ph.holding.card!, x, y)[0])
     expect(canChangeSet(g)).toBe(false)
     expect(() => changeSet(g, 1)).toThrow()
   })

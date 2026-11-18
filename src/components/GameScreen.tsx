@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { floodCells, pieceCells, placeableCells } from '../game/board'
+import { floodCells, pieceCells, placeableCells, validRotations } from '../game/board'
 import {
   BATTLE_SIZE,
   CARD_NAMES,
@@ -35,10 +35,11 @@ import { ScoreBoard } from './ScoreBoard'
 import { CardImage, PieceImage } from './Tiles'
 import { VillageBoard } from './VillageBoard'
 
+import { PLAYER_COLORS } from './colors'
+
 type Sel = { k: 'hcard' } | { k: 'hpiece' } | { k: 'kcard'; i: number } | { k: 'kpiece'; i: number } | null
 type Phase = ReturnType<typeof phaseOf>
 
-import { PLAYER_COLORS } from './colors'
 const keyOf = (x: number, y: number) => `${x},${y}`
 
 export function GameScreen() {
@@ -47,13 +48,16 @@ export function GameScreen() {
   const undo = useStore((s) => s.undo)
   const quit = useStore((s) => s.quit)
   const canUndo = useStore((s) => s.history.length > 0)
+  const prevGame = useStore((s) => s.history.at(-1) ?? null)
   const error = useStore((s) => s.error)
   const clearError = useStore((s) => s.clearError)
 
   const phase = phaseOf(game)
   const actor = phase.kind === 'over' ? null : phase.player
   const [sel, setSel] = useState<Sel>(null)
+  // rot は回した回数（アニメーションが逆回りしないよう 4 で割らずに持つ）。ルール上の向きは rot4
   const [rot, setRot] = useState(0)
+  const rot4 = ((rot % 4) + 4) % 4
   const [view, setView] = useState<number | null>(null)
   const [battlePick, setBattlePick] = useState<string[]>([])
   const [reward, setReward] = useState<{ card: number | null; piece: number | null }>({ card: null, piece: null })
@@ -101,6 +105,7 @@ export function GameScreen() {
   let targets = new Set<string>()
   let tone: 'place' | 'danger' | 'pick' = 'place'
   let onCell: ((x: number, y: number) => void) | undefined
+  let fits: Set<string> | null = null
   const selected = new Set<string>()
 
   if (phase.kind === 'flood' && shown === phase.target) {
@@ -118,8 +123,18 @@ export function GameScreen() {
     onCell = (x, y) => togglePick(keyOf(x, y))
   } else if (onOwnVillage && selCard) {
     targets = new Set(placeableCells(player.village, selCard).map(([x, y]) => keyOf(x, y)))
-    onCell = (x, y) =>
-      run((g) => (effSel?.k === 'kcard' ? playKeepCard(g, effSel.i, x, y, rot) : placeHoldingCard(g, x, y, rot)))
+    fits = new Set(placeableCells(player.village, selCard, rot4).map(([x, y]) => keyOf(x, y)))
+    const card = selCard
+    onCell = (x, y) => {
+      // いまの向きで道がつながらなければ、つながる向きに回して見せる（もう一度押すと置く）
+      const ok = validRotations(player.village, card, x, y)
+      if (!ok.includes(rot4)) {
+        const target = ok.find((r) => r > rot4) ?? ok[0]
+        setRot(rot + ((target - rot4 + 4) % 4))
+        return
+      }
+      run((g) => (effSel?.k === 'kcard' ? playKeepCard(g, effSel.i, x, y, rot4) : placeHoldingCard(g, x, y, rot4)))
+    }
   } else if (onOwnVillage && selPiece) {
     targets = new Set(pieceCells(player.village).map(([x, y]) => keyOf(x, y)))
     onCell = (x, y) =>
@@ -138,6 +153,20 @@ export function GameScreen() {
     if (act((g) => selectBattlePieces(g, refs))) setBattlePick([])
   }
 
+  // 直前の操作で置かれたカード・コマ（登場の動きをつける）
+  const freshCards = new Set<string>()
+  const freshPieces = new Set<string>()
+  const prevCells = prevGame?.players[shown]?.village.cells
+  if (prevCells) {
+    player.village.cells.forEach((row, y) =>
+      row.forEach((c, x) => {
+        const before = prevCells[y][x].placed
+        if (c.placed && c.placed.card.id !== before?.card.id) freshCards.add(keyOf(x, y))
+        if (c.placed?.piece && c.placed.piece.id !== before?.piece?.id) freshPieces.add(keyOf(x, y))
+      }),
+    )
+  }
+
   const trayVisible =
     (phase.kind === 'place' && onOwnVillage) ||
     (phase.kind === 'choose' && (!!effSel || takeableSlots(game).length === 0)) ||
@@ -154,7 +183,7 @@ export function GameScreen() {
         {phase.kind === 'over' && (
           <>
             <ScoreBoard game={game} />
-            <button type="button" onClick={quit} className="rounded-xl bg-teal-board py-3 font-bold text-white shadow">
+            <button type="button" onClick={quit} className="rounded-[3px] bg-teal-board py-3 font-bold text-white shadow">
               タイトルに戻る
             </button>
           </>
@@ -184,7 +213,7 @@ export function GameScreen() {
                     key={p.id}
                     type="button"
                     onClick={() => setView(p.id === defaultView ? null : p.id)}
-                    className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-sm font-bold transition ${
+                    className={`flex shrink-0 items-center gap-1.5 rounded-[3px] border-2 px-3 py-1.5 text-sm font-bold transition-colors duration-200 ${
                       active ? 'text-white shadow' : 'bg-white/70 text-stone-600'
                     }`}
                     style={{ borderColor: PLAYER_COLORS[p.id], background: active ? PLAYER_COLORS[p.id] : undefined }}
@@ -198,6 +227,9 @@ export function GameScreen() {
             <VillageBoard
               village={player.village}
               targets={targets}
+              fits={fits}
+              freshCards={freshCards}
+              freshPieces={freshPieces}
               selected={selected}
               targetTone={tone}
               ghost={selCard && onOwnVillage ? { card: selCard, rot } : null}
@@ -205,7 +237,7 @@ export function GameScreen() {
               onCell={onCell}
             />
             {actor !== null && shown !== actor && phase.kind !== 'flood' && (
-              <button type="button" onClick={() => setView(null)} className="mt-2 w-full rounded-lg bg-white py-2 text-sm font-bold text-teal-board shadow-sm">
+              <button type="button" onClick={() => setView(null)} className="mt-2 w-full rounded-[3px] bg-white py-2 text-sm font-bold text-teal-board shadow-sm">
                 ← {game.players[actor].name}の村にもどる
               </button>
             )}
@@ -234,7 +266,7 @@ export function GameScreen() {
             </div>
           )}
 
-          <details className="rounded-xl bg-white/70 p-3 text-sm lg:col-start-2">
+          <details className="rounded-[3px] bg-white/70 p-3 text-sm lg:col-start-2">
             <summary className="cursor-pointer font-bold text-stone-600">これまでの記録</summary>
             <ol className="mt-2 max-h-60 space-y-0.5 overflow-y-auto text-xs text-stone-600">
               {game.log
@@ -290,8 +322,8 @@ export function GameScreen() {
               player={actorPlayer}
               sel={effSel}
               rot={rot}
-              onSelect={(s) => (effSel && JSON.stringify(effSel) === JSON.stringify(s) && (s.k === 'hcard' || s.k === 'kcard') ? setRot((r) => (r + 1) % 4) : setSel(s))}
-              onRotate={() => setRot((r) => (r + 1) % 4)}
+              onSelect={(s) => (effSel && JSON.stringify(effSel) === JSON.stringify(s) && (s.k === 'hcard' || s.k === 'kcard') ? setRot((r) => r + 1) : setSel(s))}
+              onRotate={() => setRot((r) => r + 1)}
               onKeepCard={() => run(keepHoldingCard)}
               onKeepPiece={() => run(keepHoldingPiece)}
               onCancel={() => setSel(null)}
@@ -303,7 +335,7 @@ export function GameScreen() {
       <TurnNotice game={game} actor={actor} />
 
       {error && (
-        <div role="alert" className="fixed inset-x-3 top-16 z-50 mx-auto max-w-md rounded-xl bg-rose-700 px-4 py-3 text-sm font-bold text-white shadow-lg" onClick={clearError}>
+        <div key={error} role="alert" className="animate-shake fixed inset-x-3 top-16 z-50 mx-auto max-w-md rounded-[3px] border-l-4 border-rose-950 bg-rose-700 px-4 py-3 text-sm font-bold text-white shadow-lg" onClick={clearError}>
           {error}
         </div>
       )}
@@ -328,9 +360,9 @@ function TurnNotice({ game, actor }: { game: GameState; actor: number | null }) 
   }, [visible, shownFor])
   if (!visible || actor === null) return null
   return (
-    <button type="button" onClick={() => setVisible(false)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 backdrop-blur-[1px]">
-      <span className="rounded-2xl bg-white px-8 py-5 text-center shadow-2xl">
-        <span className="mx-auto mb-2 block h-4 w-4 rounded-full" style={{ background: PLAYER_COLORS[actor] }} />
+    <button type="button" onClick={() => setVisible(false)} className="animate-fade fixed inset-0 z-50 flex items-center justify-center bg-black/35 backdrop-blur-[1px]">
+      <span className="animate-pop rounded-[3px] border-t-4 bg-white px-10 py-5 text-center shadow-2xl" style={{ borderColor: PLAYER_COLORS[actor] }}>
+        <span className="mx-auto mb-3 block h-3.5 w-3.5 rotate-45" style={{ background: PLAYER_COLORS[actor] }} />
         <span className="block text-2xl font-black">{game.players[actor].name}</span>
         <span className="block text-sm font-bold text-stone-500">の番です</span>
       </span>
@@ -342,12 +374,12 @@ function Header({ game, actor, canUndo, onUndo, onQuit }: { game: GameState; act
   return (
     <header className="sticky top-0 z-30 bg-teal-board text-white shadow-md">
       <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-2">
-        <img src={maroinu} alt="" className="h-10 w-10 shrink-0 rounded-full border-2 border-white/70 object-cover object-[50%_30%]" />
+        <img src={maroinu} alt="" className="h-10 w-10 shrink-0 rounded-[3px] border-2 border-white/70 object-cover object-[50%_30%]" />
         <div className="min-w-0 flex-1">
           <p className="text-[10px] leading-none tracking-widest opacity-75">まろいぬの覇道</p>
           {actor !== null ? (
             <p className="truncate text-lg leading-tight font-black">
-              <span className="mr-1.5 inline-block h-3 w-3 rounded-full border border-white align-middle" style={{ background: PLAYER_COLORS[actor] }} />
+              <span className="mr-2 inline-block h-2.5 w-2.5 rotate-45 border border-white align-middle" style={{ background: PLAYER_COLORS[actor] }} />
               {game.players[actor].name}の番
             </p>
           ) : (
@@ -359,10 +391,10 @@ function Header({ game, actor, canUndo, onUndo, onQuit }: { game: GameState; act
           <br />
           コマ袋 {game.bag.length}個
         </div>
-        <button type="button" onClick={onUndo} disabled={!canUndo} className="rounded-lg bg-white/15 px-2.5 py-2 text-sm font-bold disabled:opacity-35" aria-label="ひとつ戻す">
+        <button type="button" onClick={onUndo} disabled={!canUndo} className="rounded-[3px] bg-white/15 px-2.5 py-2 text-sm font-bold disabled:opacity-35" aria-label="ひとつ戻す">
           ↩ 戻す
         </button>
-        <button type="button" onClick={onQuit} className="rounded-lg bg-white/15 px-2.5 py-2 text-sm" aria-label="ゲームを終了">
+        <button type="button" onClick={onQuit} className="rounded-[3px] bg-white/15 px-2.5 py-2 text-sm" aria-label="ゲームを終了">
           終了
         </button>
       </div>
@@ -375,10 +407,10 @@ function StepBanner({ phase, game, battleNeed, changeable }: { phase: Phase; gam
   if (phase.kind === 'choose' || phase.kind === 'place') {
     const step = phase.kind === 'choose' ? 1 : 2
     return (
-      <div className="rounded-xl bg-white px-3 py-2 shadow-sm">
-        <ol className="mb-1 flex gap-1.5 text-xs font-bold">
+      <div key={phase.kind + String(changeable)} className="animate-fade rounded-[3px] border-l-4 border-teal-board bg-white px-3 py-2 shadow-sm">
+        <ol className="mb-1 flex gap-1 text-[11px] font-bold tracking-wide">
           {['組を取る', '村に置く'].map((label, i) => (
-            <li key={label} className={`rounded-full px-2.5 py-0.5 ${step === i + 1 ? 'bg-teal-board text-white' : 'bg-stone-100 text-stone-400'}`}>
+            <li key={label} className={`rounded-[2px] px-2 py-0.5 transition-colors duration-300 ${step === i + 1 ? 'bg-teal-board text-white' : 'bg-stone-100 text-stone-400'}`}>
               {'①②'[i]} {label}
             </li>
           ))}
@@ -387,8 +419,8 @@ function StepBanner({ phase, game, battleNeed, changeable }: { phase: Phase; gam
           {phase.kind === 'choose'
             ? '城の上の組（カード＋コマ）を1つ押して取ろう。キープを先に村に出してもOK。'
             : changeable
-              ? '光っているマスを押して置こう。別の組がよければ城の上の組を押すと選び直せます。'
-              : '光っているマスを押して置こう。置けないものはキープへ。'}
+              ? '光っているマスを押して置こう（⟳のマスは押すと道がつながる向きに回ります）。別の組がよければ城の上の組を押すと選び直せます。'
+              : '光っているマスを押して置こう（⟳のマスは押すと道がつながる向きに回ります）。置けないものはキープへ。'}
         </p>
       </div>
     )
@@ -402,7 +434,7 @@ function StepBanner({ phase, game, battleNeed, changeable }: { phase: Phase; gam
   }
   const danger = phase.kind === 'flood' || phase.kind === 'battleSelect' || phase.kind === 'discard'
   return (
-    <p className={`rounded-xl px-3 py-2.5 text-sm leading-snug font-bold shadow-sm ${danger ? 'bg-rose-700 text-white' : 'bg-amber-100 text-amber-900'}`}>
+    <p key={phase.kind} className={`animate-fade rounded-[3px] border-l-4 px-3 py-2.5 text-sm leading-snug font-bold shadow-sm ${danger ? 'border-rose-950 bg-rose-700 text-white' : 'border-amber-500 bg-amber-100 text-amber-900'}`}>
       {text[phase.kind]}
     </p>
   )
@@ -416,6 +448,7 @@ function PanelTitle({ icon, title, sub, className = '' }: { icon: string; title:
       <span aria-hidden>{icon}</span>
       <span className="shrink-0">{title}</span>
       {sub && <span className="text-[11px] font-bold opacity-75">{sub}</span>}
+      <span aria-hidden className="ml-1 h-px min-w-6 flex-1 self-center bg-current opacity-25" />
     </h2>
   )
 }
@@ -443,7 +476,7 @@ function CastlePanel({
 
   return (
     <section
-      className="rounded-2xl p-3 text-white shadow-md"
+      className="rounded-[3px] p-3 text-white shadow-md"
       style={{
         background:
           'repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 18px), repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 34px), linear-gradient(#4a5560, #39434c)',
@@ -455,12 +488,12 @@ function CastlePanel({
           if (phase.kind === 'reward') {
             const cardOk = !!s.card && !!actorPlayer && canTakeCard(actorPlayer, s.card)
             return (
-              <div key={i} className="flex flex-col items-center rounded-lg border-2 border-dashed border-red-400/80 bg-black/15 p-1">
+              <div key={i} className="flex flex-col items-center rounded-[3px] border-2 border-dashed border-red-400/80 bg-black/15 p-1">
                 <button
                   type="button"
                   disabled={!cardOk}
                   onClick={() => onReward('card', i)}
-                  className={`w-full overflow-hidden rounded-md disabled:opacity-40 ${reward.card === i ? 'ring-4 ring-amber-400' : ''}`}
+                  className={`w-full overflow-hidden rounded-[3px] disabled:opacity-40 ${reward.card === i ? 'ring-4 ring-amber-400' : ''}`}
                   aria-label={s.card ? `${CARD_NAMES[s.card.kind]}カードを選ぶ` : '空き'}
                 >
                   {s.card ? <CardImage card={s.card} className="w-full" /> : <EmptyCard />}
@@ -489,8 +522,8 @@ function CastlePanel({
               type="button"
               disabled={!enabled}
               onClick={action}
-              className={`relative flex flex-col items-center rounded-lg border-2 border-dashed p-1 transition active:scale-95 ${
-                enabled ? 'border-amber-300 bg-amber-300/15 shadow-[0_0_0_2px_rgba(252,211,77,0.35)]' : 'border-red-400/70 bg-black/15'
+              className={`relative flex flex-col items-center rounded-[3px] border-2 border-dashed p-1 transition duration-200 active:scale-95 ${
+                enabled ? 'animate-glow border-amber-300 bg-amber-300/15 hover:-translate-y-0.5' : 'border-red-400/70 bg-black/15'
               } ${phase.kind === 'choose' && !canTake ? 'opacity-45' : ''}`}
               aria-label={
                 isFrom
@@ -502,16 +535,24 @@ function CastlePanel({
             >
               {isFrom ? (
                 <>
-                  <span className="flex aspect-square w-full flex-col items-center justify-center rounded-md border border-white/40 text-[11px] leading-tight font-bold">
+                  <span className="flex aspect-square w-full flex-col items-center justify-center rounded-[3px] border border-white/40 text-[11px] leading-tight font-bold">
                     取った組
-                    <span className="mt-0.5 rounded bg-white/20 px-1 py-0.5 text-[10px]">押すと戻す</span>
+                    <span className="mt-0.5 rounded-[2px] bg-white/20 px-1 py-0.5 text-[10px]">押すと戻す</span>
                   </span>
                   <span className="h-[calc(50%-0.75rem)]" />
                 </>
               ) : (
                 <>
-                  {s.card ? <CardImage card={s.card} className="w-full rounded-md" /> : <EmptyCard />}
-                  <span className="-mt-3 w-1/2">{s.piece ? <PieceImage piece={s.piece} className="w-full" /> : <EmptyPiece />}</span>
+                  {s.card ? (
+                    <span key={s.card.id} className="block w-full animate-deal" style={{ animationDelay: `${i * 60}ms` }}>
+                      <CardImage card={s.card} className="w-full rounded-[2px]" />
+                    </span>
+                  ) : (
+                    <EmptyCard />
+                  )}
+                  <span key={s.piece?.id ?? 'none'} className="-mt-3 w-1/2 animate-pop" style={{ animationDelay: `${120 + i * 60}ms` }}>
+                    {s.piece ? <PieceImage piece={s.piece} className="w-full" /> : <EmptyPiece />}
+                  </span>
                 </>
               )}
               {s.card && !isFrom && <span className="mt-0.5 text-[10px] leading-none font-bold opacity-90">{CARD_NAMES[s.card.kind]}</span>}
@@ -527,7 +568,7 @@ function CastlePanel({
 }
 
 function EmptyCard() {
-  return <span className="block aspect-square w-full rounded-md border border-dashed border-white/30 bg-black/10" />
+  return <span className="block aspect-square w-full rounded-[3px] border border-dashed border-white/30 bg-black/10" />
 }
 function EmptyPiece() {
   return <span className="block aspect-square w-full rounded-full border border-dashed border-white/30 bg-black/20" />
@@ -555,7 +596,7 @@ function KeepPanel({
   onTogglePick: (k: string) => void
 }) {
   return (
-    <section className="rounded-2xl border-2 border-[#b08850] bg-[#fbf3e2] p-3 text-[#5a3a1a] shadow-sm">
+    <section className="rounded-[3px] border-2 border-[#b08850] bg-[#fbf3e2] p-3 text-[#5a3a1a] shadow-sm">
       <PanelTitle icon="📦" title={`${player.name}のキープ`} sub={`カード${KEEP_LIMIT}枚・コマ${KEEP_LIMIT}個まで${usable ? '／押すと村に出せる' : ''}`} />
       <div className="flex items-end gap-2">
         {Array.from({ length: KEEP_LIMIT }).map((_, i) => {
@@ -567,13 +608,13 @@ function KeepPanel({
               type="button"
               disabled={!c || !usable}
               onClick={() => onSelect({ k: 'kcard', i })}
-              className={`flex w-[22%] max-w-20 flex-col items-center gap-0.5 rounded-lg border-2 border-dashed p-1 ${
+              className={`flex w-[22%] max-w-20 flex-col items-center gap-0.5 rounded-[3px] border-2 border-dashed p-1 ${
                 active ? 'border-amber-500 bg-amber-100 ring-2 ring-amber-500' : 'border-[#c9a774]'
               }`}
               aria-label={c ? `キープの${CARD_NAMES[c.kind]}カード` : 'カードの空き'}
             >
               {c ? (
-                <CardImage card={c} rot={active ? rot : 0} className="w-full rounded" />
+                <CardImage card={c} rot={active ? rot : 0} className="w-full rounded-[2px]" />
               ) : (
                 <span className="flex aspect-square w-full items-center justify-center text-[10px] text-[#c9a774]">カード</span>
               )}
@@ -609,8 +650,8 @@ function KeepPanel({
 
 function ActionTray({ children }: { children: ReactNode }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      <div className="mx-auto max-w-5xl rounded-2xl border-t-4 border-[#8a5a2b] bg-[#f6e7c8] p-2.5 shadow-[0_-6px_20px_rgba(0,0,0,0.25)]">
+    <div className="fixed inset-x-0 bottom-0 z-40 animate-rise sm:px-2 sm:pb-2">
+      <div className="mx-auto max-w-5xl border-t-4 border-[#8a5a2b] bg-[#f6e7c8] p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] shadow-[0_-6px_20px_rgba(0,0,0,0.25)] sm:rounded-[3px]">
         {children}
       </div>
     </div>
@@ -654,7 +695,7 @@ function HandTray({
       <div className="flex items-stretch gap-2">
         {holding?.card && (
           <HandItem active={sel?.k === 'hcard'} onClick={() => onSelect({ k: 'hcard' })} label={`${CARD_NAMES[holding.card.kind]}カード`}>
-            <CardImage card={holding.card} rot={sel?.k === 'hcard' ? rot : 0} className="h-full w-full rounded" />
+            <CardImage card={holding.card} rot={sel?.k === 'hcard' ? rot : 0} className="h-full w-full rounded-[2px]" />
           </HandItem>
         )}
         {holding?.piece && (
@@ -664,7 +705,7 @@ function HandTray({
         )}
         {keepCard && (
           <HandItem active onClick={onRotate} label={`${CARD_NAMES[keepCard.kind]}カード`}>
-            <CardImage card={keepCard} rot={rot} className="h-full w-full rounded" />
+            <CardImage card={keepCard} rot={rot} className="h-full w-full rounded-[2px]" />
           </HandItem>
         )}
         {keepPiece && (
@@ -674,7 +715,7 @@ function HandTray({
         )}
         <div className="ml-auto flex flex-col justify-center gap-1.5">
           {cardSelected && (
-            <button type="button" onClick={onRotate} className="rounded-lg bg-teal-board px-3 py-2.5 text-sm font-bold text-white shadow active:scale-95">
+            <button type="button" onClick={onRotate} className="rounded-[3px] bg-teal-board px-3 py-2.5 text-sm font-bold text-white shadow active:scale-95">
               ⟳ 回す
             </button>
           )}
@@ -683,7 +724,7 @@ function HandTray({
               type="button"
               disabled={player.keepCards.length >= KEEP_LIMIT}
               onClick={onKeepCard}
-              className="rounded-lg border-2 border-[#8a5a2b] bg-white px-3 py-2 text-sm font-bold text-[#5a3a1a] disabled:opacity-40"
+              className="rounded-[3px] border-2 border-[#8a5a2b] bg-white px-3 py-2 text-sm font-bold text-[#5a3a1a] disabled:opacity-40"
             >
               📦 キープへ
             </button>
@@ -693,13 +734,13 @@ function HandTray({
               type="button"
               disabled={player.keepPieces.length >= KEEP_LIMIT}
               onClick={onKeepPiece}
-              className="rounded-lg border-2 border-[#8a5a2b] bg-white px-3 py-2 text-sm font-bold text-[#5a3a1a] disabled:opacity-40"
+              className="rounded-[3px] border-2 border-[#8a5a2b] bg-white px-3 py-2 text-sm font-bold text-[#5a3a1a] disabled:opacity-40"
             >
               📦 キープへ
             </button>
           )}
           {fromKeep && (
-            <button type="button" onClick={onCancel} className="rounded-lg bg-white px-3 py-2 text-sm font-bold text-stone-600">
+            <button type="button" onClick={onCancel} className="rounded-[3px] bg-white px-3 py-2 text-sm font-bold text-stone-600">
               やめる
             </button>
           )}
@@ -717,8 +758,8 @@ function HandItem({ active, onClick, label, children }: { active: boolean; onCli
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-[5.5rem] flex-col items-center gap-1 rounded-xl p-1.5 transition active:scale-95 ${
-        active ? 'bg-white shadow-md ring-3 ring-amber-500' : 'bg-white/50 opacity-70'
+      className={`flex w-[5.5rem] flex-col items-center gap-1 rounded-[3px] p-1.5 transition-all duration-200 active:scale-95 ${
+        active ? '-translate-y-1 bg-white shadow-lg ring-3 ring-amber-500' : 'bg-white/50 opacity-70 hover:opacity-100'
       }`}
     >
       <span className="flex h-[4.5rem] w-[4.5rem] items-center justify-center">{children}</span>
@@ -730,7 +771,7 @@ function HandItem({ active, onClick, label, children }: { active: boolean; onCli
 function BigButton({ tone, disabled, onClick, children }: { tone: 'rose' | 'amber' | 'stone'; disabled?: boolean; onClick: () => void; children: ReactNode }) {
   const color = { rose: 'bg-rose-700', amber: 'bg-amber-600', stone: 'bg-stone-600' }[tone]
   return (
-    <button type="button" disabled={disabled} onClick={onClick} className={`${color} min-h-12 rounded-xl px-5 py-3 font-black text-white shadow active:scale-95 disabled:opacity-40 ${tone === 'stone' ? 'w-full' : ''}`}>
+    <button type="button" disabled={disabled} onClick={onClick} className={`${color} min-h-12 rounded-[3px] px-5 py-3 font-black text-white shadow active:scale-95 disabled:opacity-40 ${tone === 'stone' ? 'w-full' : ''}`}>
       {children}
     </button>
   )
@@ -741,12 +782,12 @@ function BigButton({ tone, disabled, onClick, children }: { tone: 'rose' | 'ambe
 function BattleResult({ game }: { game: GameState }) {
   const b = game.battle!
   return (
-    <section className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-3 text-sm text-rose-950 shadow-sm">
+    <section className="rounded-[3px] border-2 border-rose-300 bg-rose-50 p-3 text-sm text-rose-950 shadow-sm">
       <PanelTitle icon="⚔" title="直近の合戦" className="text-rose-800" />
       <ul className="space-y-1.5">
         {b.entries.map((e) => (
           <li key={e.player} className="flex flex-wrap items-center gap-1">
-            <span className="mr-1 inline-block h-2.5 w-2.5 rounded-full" style={{ background: PLAYER_COLORS[e.player] }} />
+            <span className="mr-1 inline-block h-2 w-2 rotate-45" style={{ background: PLAYER_COLORS[e.player] }} />
             <span className="font-bold">{game.players[e.player].name}</span>
             {e.pieces.map((pc) => (
               <PieceImage key={pc.id} piece={pc} className="w-6" showStrength={false} />

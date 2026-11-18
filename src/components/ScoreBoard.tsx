@@ -8,7 +8,7 @@ export function ScoreBoard({ game }: { game: GameState }) {
   const rows = Object.keys(SCORE_LABELS) as (keyof typeof SCORE_LABELS)[]
 
   return (
-    <section className="rounded-xl bg-white p-3 shadow">
+    <section className="rounded-[3px] bg-white p-3 shadow">
       <h2 className="text-lg font-bold">🏆 {winners.length > 1 ? `${winners.join('・')}の引き分け` : `${winners[0]}の勝ち！`}</h2>
       {game.finisher !== null && <p className="text-sm text-stone-600">{game.players[game.finisher].name}が城まで道をつなぎました。</p>}
       <div className="mt-2 overflow-x-auto">
