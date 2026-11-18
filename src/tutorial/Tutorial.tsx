@@ -268,8 +268,25 @@ function MaroLayout({ index, done, last, stage, onPrev, onNext, onPlay, onRestar
   }, [line, onPrev])
   useKeys(back, advance)
 
+  // しゃべっている間は、画面のどこを押しても次へ進む
+  const talking = typing || !atEnd
+  // しゃべり終えたあとも、ボタン以外の場所を押せば次のステップへ（盤面のボタンはそのまま使える）
+  const onBackgroundClick = (e: React.MouseEvent) => {
+    if ((e.target as Element).closest('button, a, input, select, label, [role="button"]')) return
+    if (talking) advance()
+    else if (done && !last) onNext()
+  }
+
   return (
-    <>
+    <div onClick={onBackgroundClick}>
+      {talking && (
+        <button
+          type="button"
+          onClick={advance}
+          className="fixed inset-0 z-20 cursor-pointer bg-transparent"
+          aria-label="続きを読む（画面のどこを押しても進みます）"
+        />
+      )}
       <main className="mx-auto grid max-w-5xl gap-3 px-3 pt-3 pb-56 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:pb-10">
         <div className="flex flex-col gap-2 lg:sticky lg:top-24">
           <div key={index} className="flex animate-fade items-baseline gap-2">
@@ -303,7 +320,12 @@ function MaroLayout({ index, done, last, stage, onPrev, onNext, onPlay, onRestar
                   <Rich text={text} limit={count} />
                   {typing && <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-stone-500" />}
                 </span>
-                {!typing && (!atEnd || (done && !last)) && <span className="absolute right-0 bottom-0 animate-bounce text-xs text-[#8b1e1e]">▼</span>}
+                {!typing && (!atEnd || (done && !last)) && (
+                  <span className="absolute right-0 bottom-0 flex items-center gap-1 text-[10px] font-bold text-[#8b1e1e]/70">
+                    どこでもタップ
+                    <span className="animate-bounce text-xs text-[#8b1e1e]">▼</span>
+                  </span>
+                )}
               </button>
             </div>
             <div className="mt-2 flex items-center gap-2">
@@ -330,6 +352,6 @@ function MaroLayout({ index, done, last, stage, onPrev, onNext, onPlay, onRestar
           </div>
         </div>
       </main>
-    </>
+    </div>
   )
 }
