@@ -60,6 +60,8 @@ export interface Holding {
   player: number
   card: Card | null
   piece: Piece | null
+  /** 城の上から取った組で、まだ何も置いていなければ取った場所。置くと選び直せなくなる */
+  fromSlot?: number
 }
 
 export type Task =

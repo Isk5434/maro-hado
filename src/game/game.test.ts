@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { canPlaceCard, createVillage, floodCells, isConnected, passesFort, rotate } from './board'
+import { canPlaceCard, createVillage, floodCells, isConnected, passesFort, placeableCells, rotate } from './board'
 import {
   CARD_COUNTS,
+  canChangeSet,
+  changeSet,
   createGame,
   discardCard,
   phaseOf,
@@ -200,6 +202,32 @@ describe('進行', () => {
     }
   })
 
+  it('取った組は、まだ何も置いていなければ選び直せる', () => {
+    let g = createGame(['A', 'B'], 11)
+    const before = structuredClone(g.slots)
+    g = takeSet(g, 0)
+    expect(canChangeSet(g)).toBe(true)
+    g = changeSet(g, 2)
+    expect(g.slots[0]).toEqual(before[0]) // 最初の組は城の上に戻った
+    const ph = phaseOf(g)
+    expect(ph.kind === 'place' && ph.holding.card?.id).toBe(before[2].card!.id)
+    // 同じ場所を選ぶと戻すだけ
+    g = changeSet(g, 2)
+    expect(g.queue).toEqual([])
+    expect(g.slots).toEqual(before)
+  })
+
+  it('カードかコマを置いたら選び直せない', () => {
+    let g = createGame(['A', 'B'], 12)
+    g = takeSet(g, takeableSlots(g)[0])
+    const ph = phaseOf(g)
+    if (ph.kind !== 'place') throw new Error('place のはず')
+    const [x, y] = placeableCellsFor(g, ph.holding.card!)
+    g = placeHoldingCard(g, x, y, 0)
+    expect(canChangeSet(g)).toBe(false)
+    expect(() => changeSet(g, 1)).toThrow()
+  })
+
   it('合戦: 3人以上いれば3人、同点は振り直し、敗者は1枚捨てる', () => {
     let g = createGame(['A', 'B'], 3)
     const [a, b] = g.players
@@ -255,6 +283,10 @@ describe('進行', () => {
     expect(g.players[1].village.cells[2][7].placed).toBeNull()
   })
 })
+
+function placeableCellsFor(g: GameState, c: Card): [number, number] {
+  return placeableCells(g.players[g.current].village, c)[0]
+}
 
 function settleFromQueue(g: GameState) {
   return settle(g)

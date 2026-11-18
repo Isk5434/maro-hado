@@ -362,19 +362,43 @@ function frontTask<T extends Task['t']>(state: GameState, t: T): Extract<Task, {
   return task as Extract<Task, { t: T }>
 }
 
+function doTakeSet(s: GameState, slot: number) {
+  if (s.over || s.queue.length) throw new Error('今はその操作はできません')
+  if (!takeableSlots(s).includes(slot)) throw new Error('その組は取れません')
+  const { card, piece } = s.slots[slot]
+  s.slots[slot] = { card: null, piece: null }
+  log(s, `${s.players[s.current].name}は${CARD_NAMES[card!.kind]}${piece ? `と${PIECE_NAMES[piece.kind]}` : ''}を取った`)
+  s.queue.push(
+    { t: 'place', holding: { player: s.current, card, piece, fromSlot: slot } },
+    { t: 'refillCard', slot },
+    { t: 'refillPiece', slot },
+    { t: 'endTurn' },
+  )
+}
+
 export function takeSet(state: GameState, slot: number): GameState {
+  return apply(state, (s) => doTakeSet(s, slot))
+}
+
+/** 取った組をまだ何も置いていなければ、城の上に戻せるか */
+export function canChangeSet(state: GameState): boolean {
+  const task = state.queue[0]
+  return !state.over && task?.t === 'place' && task.holding.fromSlot !== undefined
+}
+
+/**
+ * 取った組を城の上に戻し、別の組を取り直す。同じ場所を選ぶと、戻すだけ。
+ * カードもコマもまだ置いていないときだけできる。
+ */
+export function changeSet(state: GameState, slot: number): GameState {
   return apply(state, (s) => {
-    if (s.over || s.queue.length) throw new Error('今はその操作はできません')
-    if (!takeableSlots(s).includes(slot)) throw new Error('その組は取れません')
-    const { card, piece } = s.slots[slot]
-    s.slots[slot] = { card: null, piece: null }
-    log(s, `${s.players[s.current].name}は${CARD_NAMES[card!.kind]}${piece ? `と${PIECE_NAMES[piece.kind]}` : ''}を取った`)
-    s.queue.push(
-      { t: 'place', holding: { player: s.current, card, piece } },
-      { t: 'refillCard', slot },
-      { t: 'refillPiece', slot },
-      { t: 'endTurn' },
-    )
+    if (!canChangeSet(s)) throw new Error('もう置き始めたので選び直せません（「戻す」で取り消せます）')
+    const h = (s.queue[0] as Extract<Task, { t: 'place' }>).holding
+    const from = h.fromSlot!
+    s.slots[from] = { card: h.card, piece: h.piece }
+    s.queue = []
+    log(s, `${s.players[s.current].name}は取った組を城の上に戻した`)
+    if (slot !== from) doTakeSet(s, slot)
   })
 }
 
@@ -394,6 +418,7 @@ export function placeHoldingCard(state: GameState, x: number, y: number, rot: nu
     if (!h.card || !canPlaceCard(p.village, h.card, x, y)) throw new Error('そこには置けません')
     p.village.cells[y][x].placed = { card: h.card, rot, piece: null }
     h.card = null
+    h.fromSlot = undefined
     finishIfConnected(s, h.player)
   })
 }
@@ -405,6 +430,7 @@ export function keepHoldingCard(state: GameState): GameState {
     if (!h.card || p.keepCards.length >= KEEP_LIMIT) throw new Error('キープがいっぱいです')
     p.keepCards.push(h.card)
     h.card = null
+    h.fromSlot = undefined
   })
 }
 
@@ -415,6 +441,7 @@ export function placeHoldingPiece(state: GameState, x: number, y: number): GameS
     if (!h.piece || !cell?.placed || cell.placed.piece) throw new Error('そこには置けません')
     cell.placed.piece = h.piece
     h.piece = null
+    h.fromSlot = undefined
   })
 }
 
@@ -425,6 +452,7 @@ export function keepHoldingPiece(state: GameState): GameState {
     if (!h.piece || p.keepPieces.length >= KEEP_LIMIT) throw new Error('キープがいっぱいです')
     p.keepPieces.push(h.piece)
     h.piece = null
+    h.fromSlot = undefined
   })
 }
 
