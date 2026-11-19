@@ -30,7 +30,7 @@ export interface Step {
 
 // ---------------------------------------------------------------- 各ステップの舞台
 
-function GoalStage() {
+export function GoalStage() {
   const i = useTicker(160, ROAD_PATH.length + 6)
   const v = makeVillage(FULL_ROAD)
   return (
@@ -50,7 +50,7 @@ const PLACES = [
   { id: 'river', name: '川', cells: ['2,0', '2,1', '2,2', '3,2', '4,2', '5,2', '5,3'], text: '直線カードだけを置ける（橋になる）' },
 ]
 
-function MapStage({ onDone }: StageProps) {
+export function MapStage({ onDone }: StageProps) {
   const [found, setFound] = useState<string[]>([])
   const [last, setLast] = useState<(typeof PLACES)[number] | null>(null)
   const v = makeVillage()
@@ -100,6 +100,7 @@ const CARD_INFO: Record<CardKind, string> = {
   cross: '4方向の道。商人をのせると1点',
   farm: '道のない畑。農民をのせると1点、4枚つながると3点',
   inn: '十字の道としてつながる宿場町。商人をのせると2点',
+  temple: '寺院。村のふちにしか置けない。僧をのせると3点',
   battle: '補充で出たら合戦が起きる',
   flood: '補充で出たら、前の人の村の川沿いが氾濫する',
 }
@@ -146,14 +147,15 @@ const PIECE_INFO: Record<PieceKind, string> = {
   farmer: '農地の上にいると1点',
   merchant: '十字の道で1点、宿場で2点',
   samurai: '砦のまわり8マスにいると1点',
+  monk: '寺の上にいると3点',
 }
 
-function PiecesStage() {
+export const makePiecesStage = (kinds: PieceKind[], counts: Partial<Record<PieceKind, number>> = PIECE_COUNTS) =>
+  function PiecesStage() {
   const [sel, setSel] = useState<PieceKind>('samurai')
-  const kinds: PieceKind[] = ['farmer', 'merchant', 'samurai']
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${kinds.length}, minmax(0, 1fr))` }}>
         {kinds.map((kind, i) => (
           <button
             key={kind}
@@ -162,9 +164,9 @@ function PiecesStage() {
             className={`flex animate-pop flex-col items-center gap-1 rounded-[3px] p-2 text-white transition-all duration-200 ${sel === kind ? '-translate-y-1 bg-amber-300/25 ring-2 ring-amber-300' : 'bg-black/20'}`}
             style={{ animationDelay: `${i * 120}ms` }}
           >
-            <PieceImage piece={{ id: 0, kind }} className="w-16" />
+            <PieceImage piece={{ id: 0, kind }} className="w-full max-w-16" />
             <span className="text-sm font-black">{PIECE_NAMES[kind]}</span>
-            <span className="text-[11px] opacity-75">×{PIECE_COUNTS[kind]}</span>
+            <span className="text-[11px] opacity-75">×{counts[kind]}</span>
           </button>
         ))}
       </div>
@@ -184,15 +186,16 @@ function PiecesStage() {
     </div>
   )
 }
+const PiecesStage = makePiecesStage(['farmer', 'merchant', 'samurai'])
 
-const SETUP_SLOTS = () => [
+export const SETUP_SLOTS = () => [
   { card: C('straight'), piece: P('farmer') },
   { card: C('farm'), piece: P('samurai') },
   { card: C('T'), piece: P('merchant') },
   { card: C('cross'), piece: P('farmer') },
 ]
 
-function SetupStage() {
+export function SetupStage() {
   const [deal, setDeal] = useState(0)
   const [slots] = useState(SETUP_SLOTS)
   return (
@@ -216,7 +219,7 @@ function SetupStage() {
   )
 }
 
-function TakeStage({ onDone }: StageProps) {
+export function TakeStage({ onDone }: StageProps) {
   const [slots] = useState(SETUP_SLOTS)
   const [picked, setPicked] = useState<number | null>(null)
   const shown = slots.map((s, i) => (i === picked ? { card: null, piece: null } : s))
@@ -247,7 +250,7 @@ function TakeStage({ onDone }: StageProps) {
   )
 }
 
-function PlaceCardStage({ onDone }: StageProps) {
+export function PlaceCardStage({ onDone }: StageProps) {
   return (
     <PlaceDemo
       initial={makeVillage()}
@@ -261,7 +264,7 @@ function PlaceCardStage({ onDone }: StageProps) {
   )
 }
 
-function PlacePieceStage({ onDone }: StageProps) {
+export function PlacePieceStage({ onDone }: StageProps) {
   const [v, setV] = useState(() => makeVillage([[6, 3, 'straight', 1]]))
   const [piece, setPiece] = useState<Piece | null>(() => P('farmer'))
   const [refilled, setRefilled] = useState(false)
@@ -300,7 +303,7 @@ function PlacePieceStage({ onDone }: StageProps) {
   )
 }
 
-function WhereStage() {
+export function WhereStage() {
   const [mode, setMode] = useState<'start' | 'fort'>('start')
   const v = mode === 'start' ? makeVillage([[6, 3, 'straight', 1], [7, 2, 'farm']]) : makeVillage([[6, 3, 'straight', 1], [4, 3, 'straight', 1]])
   const cells = mode === 'start' ? placeableCells(v, C('farm')).map(([x, y]) => k(x, y)) : ['2,3']
@@ -336,7 +339,7 @@ function WhereStage() {
   )
 }
 
-function ConnectStage({ onDone }: StageProps) {
+export function ConnectStage({ onDone }: StageProps) {
   return (
     <PlaceDemo
       initial={makeVillage([[7, 2, 'straight', 0]])}
@@ -356,7 +359,7 @@ function ConnectStage({ onDone }: StageProps) {
   )
 }
 
-function RiverStage({ onDone }: StageProps) {
+export function RiverStage({ onDone }: StageProps) {
   return (
     <PlaceDemo
       initial={makeVillage([[6, 3, 'straight', 1]])}
@@ -371,7 +374,7 @@ function RiverStage({ onDone }: StageProps) {
   )
 }
 
-function KeepStage({ onDone }: StageProps) {
+export function KeepStage({ onDone }: StageProps) {
   const [kept, setKept] = useState<{ card: boolean; piece: boolean }>({ card: false, piece: false })
   const [card] = useState(() => C('cross'))
   const [piece] = useState(() => P('merchant'))
@@ -416,7 +419,7 @@ function KeepStage({ onDone }: StageProps) {
   )
 }
 
-function EventStage() {
+export function EventStage() {
   const i = useTicker(900, 3)
   const kinds: CardKind[] = ['battle', 'battle', 'farm', 'farm']
   return (
@@ -448,16 +451,20 @@ function EventStage() {
 
 type Fighter = { name: string; color: string; pieces: PieceKind[]; dice: number[][] }
 
-function BattleStage({ onDone, done }: StageProps) {
-  const mine: PieceKind[] = ['samurai', 'farmer', 'farmer', 'merchant']
+interface BattleSetup {
+  mine: PieceKind[]
+  /** 出す人数の下限・上限（短縮版は必ず3人、通常版は1〜3人） */
+  min: number
+  max: number
+  rivals: Fighter[]
+}
+
+export const makeBattleStage = ({ mine, min, max, rivals }: BattleSetup) =>
+  function BattleStage({ onDone, done }: StageProps) {
   const [pick, setPick] = useState<number[]>([])
   const [phase, setPhase] = useState<'pick' | 'rolling' | 'result'>('pick')
   const strength = (ks: PieceKind[]) => ks.reduce((s, x) => s + STRENGTH[x], 0)
   const myPieces = pick.map((i) => mine[i])
-  const rivals: Fighter[] = [
-    { name: 'Bさん', color: '#2471a3', pieces: ['samurai', 'farmer', 'merchant'], dice: [[2, 3], [1, 4]] },
-    { name: 'Cさん', color: '#1e8449', pieces: ['farmer', 'farmer', 'merchant'], dice: [[4, 2]] },
-  ]
   const me: Fighter = { name: 'あなた', color: '#c0392b', pieces: myPieces, dice: [[3, 4], [6, 2]] }
   const total = (f: Fighter, round = 0) => strength(f.pieces) + f.dice[round][0] + f.dice[round][1]
   const all = [me, ...rivals]
@@ -475,14 +482,14 @@ function BattleStage({ onDone, done }: StageProps) {
   return (
     <div className="flex flex-col gap-2 text-white">
       <div className="rounded-[3px] bg-black/20 p-2">
-        <p className="mb-1.5 text-xs font-black text-amber-200">あなたの人物コマ（3人選ぶ）</p>
+        <p className="mb-1.5 text-xs font-black text-amber-200">あなたの人物コマ（{min === max ? `${max}人選ぶ` : `${min}〜${max}人選ぶ`}）</p>
         <div className="flex items-center gap-2">
           {mine.map((kind, i) => (
             <button
               key={i}
               type="button"
               disabled={phase !== 'pick'}
-              onClick={() => setPick((p) => (p.includes(i) ? p.filter((q) => q !== i) : p.length < 3 ? [...p, i] : p))}
+              onClick={() => setPick((p) => (p.includes(i) ? p.filter((q) => q !== i) : p.length < max ? [...p, i] : p))}
               className={`rounded-full p-0.5 transition-all duration-200 ${pick.includes(i) ? '-translate-y-1 ring-3 ring-amber-300' : 'opacity-70'}`}
             >
               <PieceImage piece={{ id: i, kind }} className="w-11" />
@@ -497,11 +504,11 @@ function BattleStage({ onDone, done }: StageProps) {
       {phase === 'pick' ? (
         <button
           type="button"
-          disabled={pick.length !== 3}
+          disabled={pick.length < min || pick.length > max}
           onClick={roll}
           className="rounded-[3px] bg-rose-700 py-2.5 font-black shadow transition active:scale-95 disabled:opacity-40"
         >
-          {pick.length === 3 ? '⚔ 出陣してサイコロを振る' : `あと${3 - pick.length}人選ぶ`}
+          {pick.length >= min ? '⚔ 出陣してサイコロを振る' : `あと${min - pick.length}人選ぶ`}
         </button>
       ) : (
         <div className="flex flex-col gap-1.5">
@@ -542,7 +549,17 @@ function BattleStage({ onDone, done }: StageProps) {
   )
 }
 
-function AfterBattleStage({ onDone }: StageProps) {
+const BattleStage = makeBattleStage({
+  mine: ['samurai', 'farmer', 'farmer', 'merchant'],
+  min: 3,
+  max: 3,
+  rivals: [
+    { name: 'Bさん', color: '#2471a3', pieces: ['samurai', 'farmer', 'merchant'], dice: [[2, 3], [1, 4]] },
+    { name: 'Cさん', color: '#1e8449', pieces: ['farmer', 'farmer', 'merchant'], dice: [[4, 2]] },
+  ],
+})
+
+export function AfterBattleStage({ onDone }: StageProps) {
   const [v, setV] = useState(() =>
     makeVillage([
       [6, 3, 'straight', 1, 'farmer'],
@@ -578,7 +595,7 @@ function AfterBattleStage({ onDone }: StageProps) {
   )
 }
 
-function FloodStage({ onDone }: StageProps) {
+export function FloodStage({ onDone }: StageProps) {
   const [v, setV] = useState(() => makeVillage([[6, 3, 'straight', 1], [7, 2, 'farm']]))
   const [done, setDone] = useState(false)
   const cells = done ? [] : floodCells(v).map(([x, y]) => k(x, y))
@@ -615,7 +632,7 @@ function RoadGlow() {
   return <VillageBoard village={makeVillage(FULL_ROAD)} glow={new Set(ROAD_PATH.slice(0, i))} spotlight={new Set(ROAD_PATH)} labels={{ '0,0': '城', '7,3': '館' }} />
 }
 
-function EndStage({ onDone }: StageProps) {
+export function EndStage({ onDone }: StageProps) {
   const [complete, setComplete] = useState(false)
   return (
     <div className="relative">
@@ -695,7 +712,7 @@ function ScoreStage() {
   )
 }
 
-function SummaryStage() {
+export function SummaryStage() {
   const flow = [
     { n: '1', t: '組を取る', d: '城の上の4組から1組' },
     { n: '2', t: '村に置く', d: 'カードは道がつながる向きで。コマはカードの上に。置けなければキープ' },

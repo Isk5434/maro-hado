@@ -7,7 +7,8 @@ export const ALL_DIRS = [N, E, S, W] as const
 export type Dir = (typeof ALL_DIRS)[number]
 
 export type RoadShape = 'straight' | 'L' | 'T' | 'cross'
-export type PlaceKind = RoadShape | 'farm' | 'inn'
+/** temple(寺)は通常版だけで使う */
+export type PlaceKind = RoadShape | 'farm' | 'inn' | 'temple'
 export type EventKind = 'battle' | 'flood'
 export type CardKind = PlaceKind | EventKind
 
@@ -16,7 +17,8 @@ export interface Card {
   kind: CardKind
 }
 
-export type PieceKind = 'farmer' | 'merchant' | 'samurai'
+/** monk(僧)は通常版だけで使う */
+export type PieceKind = 'farmer' | 'merchant' | 'samurai' | 'monk'
 
 export interface Piece {
   id: number

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { canPlaceCard, createVillage, isWater, placeableCells, validRotations } from '../game/board'
+import { canPlaceCard, createVillage, isEdge, isWater, placeableCells, validRotations } from '../game/board'
 import { CARD_NAMES, PIECE_NAMES } from '../game/engine'
 import type { Card, CardKind, Piece, PieceKind, Village } from '../game/types'
 import { CardImage, PieceImage } from '../components/Tiles'
@@ -153,12 +153,35 @@ export function HandRow({ children, label = '手元' }: { children: ReactNode; l
   )
 }
 
-export function HandCard({ card, rot = 0, active, onClick }: { card: Card; rot?: number; active?: boolean; onClick?: () => void }) {
+export function HandCard({
+  card,
+  rot = 0,
+  active,
+  onClick,
+  onDragStart,
+}: {
+  card: Card
+  rot?: number
+  active?: boolean
+  onClick?: () => void
+  /** PCでドラッグして置けるようにする */
+  onDragStart?: () => void
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-16 flex-col items-center gap-0.5 rounded-[3px] p-1 transition-all duration-200 ${active ? '-translate-y-1 bg-white shadow-lg ring-3 ring-amber-500' : 'bg-white/50'}`}
+      draggable={!!onDragStart}
+      onDragStart={
+        onDragStart
+          ? (e) => {
+              e.dataTransfer.effectAllowed = 'move'
+              e.dataTransfer.setData('text/plain', String(card.id))
+              onDragStart()
+            }
+          : undefined
+      }
+      className={`flex w-16 flex-col items-center gap-0.5 rounded-[3px] p-1 transition-all duration-200 lg:w-20 ${onDragStart ? 'cursor-grab active:cursor-grabbing' : ''} ${active ? '-translate-y-1 bg-white shadow-lg ring-3 ring-amber-500' : 'bg-white/50'} hover:-translate-y-1.5 hover:rotate-[-2deg]`}
     >
       <CardImage card={card} rot={rot} className="w-full rounded-[2px]" />
       <span className="text-[10px] leading-none font-bold">{CARD_NAMES[card.kind]}</span>
@@ -209,7 +232,16 @@ export function PlaceDemo({
   if (only && card) for (const key of only) if (!v.cells[+key.split(',')[1]][+key.split(',')[0]].placed) targets.add(key)
   const fits = card ? new Set(placeableCells(v, card, rot4).map(([x, y]) => k(x, y))) : null
 
-  const onCell = (x: number, y: number) => {
+  // PC: R キーで回す
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.key === 'r' || e.key === 'R') && card && card.kind !== 'farm' && card.kind !== 'temple') setRot((r) => r + 1)
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [card])
+
+  const onCell = (x: number, y: number, dropped = false) => {
     if (!card) return
     const key = k(x, y)
     if (!canPlaceCard(v, card, x, y)) {
@@ -218,19 +250,29 @@ export function PlaceDemo({
       const cell = v.cells[y][x]
       setMsg({
         tone: 'bad',
-        text: isWater(cell) && card.kind !== 'straight' ? `川には直線カードしか置けません（${CARD_NAMES[card.kind]}は置けない）` : 'ここでは道がつながらないので置けません',
+        text:
+          isWater(cell) && card.kind !== 'straight'
+            ? `川には直線カードしか置けません（${CARD_NAMES[card.kind]}は置けない）`
+            : card.kind === 'temple' && !isEdge(x, y)
+              ? '寺カードは村のふち（四辺）にしか置けません'
+              : 'ここでは道がつながらないので置けません',
       })
       return
     }
     const ok = validRotations(v, card, x, y)
+    let useRot = rot4
     if (!ok.includes(rot4)) {
       const target = ok.find((r) => r > rot4) ?? ok[0]
       setRot(rot + ((target - rot4 + 4) % 4))
-      setMsg({ tone: 'info', text: '道がつながる向きに回しました。もう一度押すと置けます' })
-      return
+      // ドラッグで落としたときは、つながる向きに回してそのまま置く
+      if (!dropped) {
+        setMsg({ tone: 'info', text: '道がつながる向きに回しました。もう一度押すと置けます' })
+        return
+      }
+      useRot = target
     }
     const next = structuredClone(v)
-    next.cells[y][x].placed = { card, rot: rot4, piece: null }
+    next.cells[y][x].placed = { card, rot: useRot, piece: null }
     setV(next)
     setFresh(key)
     const rest = cards.filter((_, i) => i !== sel)
@@ -251,7 +293,8 @@ export function PlaceDemo({
         freshCards={fresh ? new Set([fresh]) : undefined}
         labels={labels}
         shake={shake}
-        onCell={onCell}
+        onCell={(x, y) => onCell(x, y)}
+        onDropCell={(x, y) => onCell(x, y, true)}
       />
       {cards.length > 0 && (
         <HandRow>
@@ -262,9 +305,20 @@ export function PlaceDemo({
               rot={i === sel ? rot : (h.rot ?? 0)}
               active={i === sel}
               onClick={() => (i === sel ? setRot((r) => r + 1) : (setSel(i), setRot(h.rot ?? 0)))}
+              onDragStart={() => {
+                if (i !== sel) {
+                  setSel(i)
+                  setRot(h.rot ?? 0)
+                }
+              }}
             />
           ))}
-          {card && card.kind !== 'farm' && <RotateButton onClick={() => setRot((r) => r + 1)} />}
+          <span className="hidden text-[11px] leading-tight font-bold opacity-70 [@media(hover:hover)]:block">
+            ドラッグして盤に置ける
+            <br />
+            <kbd className="rounded-[2px] border border-current px-1">R</kbd> で回す
+          </span>
+          {card && card.kind !== 'farm' && card.kind !== 'temple' && <RotateButton onClick={() => setRot((r) => r + 1)} />}
         </HandRow>
       )}
       {msg && (

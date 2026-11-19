@@ -20,12 +20,14 @@ export const CARD_COUNTS: Record<CardKind, number> = {
   cross: 10,
   farm: 20,
   inn: 8,
+  temple: 0, // 通常版のみ（8枚）
   battle: 3,
   flood: 7,
 }
 
-export const PIECE_COUNTS: Record<PieceKind, number> = { farmer: 56, merchant: 28, samurai: 28 }
-export const STRENGTH: Record<PieceKind, number> = { samurai: 4, farmer: 2, merchant: 1 }
+/** 短縮版の数。僧は通常版のみ（18個） */
+export const PIECE_COUNTS: Record<PieceKind, number> = { farmer: 56, merchant: 28, samurai: 28, monk: 0 }
+export const STRENGTH: Record<PieceKind, number> = { samurai: 4, monk: 3, farmer: 2, merchant: 1 }
 
 export const CARD_NAMES: Record<CardKind, string> = {
   straight: '直線',
@@ -34,10 +36,11 @@ export const CARD_NAMES: Record<CardKind, string> = {
   cross: '十字',
   farm: '農地',
   inn: '宿場',
+  temple: '寺',
   battle: '合戦',
   flood: '氾濫',
 }
-export const PIECE_NAMES: Record<PieceKind, string> = { farmer: '農民', merchant: '商人', samurai: '武士' }
+export const PIECE_NAMES: Record<PieceKind, string> = { farmer: '農民', merchant: '商人', samurai: '武士', monk: '僧' }
 
 // ---------- 乱数（シード固定でテストできるようにする） ----------
 

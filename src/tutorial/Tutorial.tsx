@@ -1,22 +1,37 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import face from '../assets/game/maroinu-face.jpg'
+import maroinu from '../assets/game/maroinu.jpg'
 import { Rich, plainLength } from './kit'
-import { CHAPTERS, STEPS } from './steps'
+import { RULESETS, RulesContext, useRules, type RulesId } from './rulesets'
 
 export type TutorialMode = 'guide' | 'maro'
 
-const storeKey = (mode: TutorialMode) => `maro-hado:tutorial:${mode}`
-function loadStep(mode: TutorialMode) {
+const storeKey = (mode: TutorialMode, rules: RulesId) => `maro-hado:tutorial:${rules === 'short' ? '' : 'full:'}${mode}`
+function loadStep(mode: TutorialMode, rules: RulesId) {
   try {
-    const n = Number(localStorage.getItem(storeKey(mode)))
-    return Number.isInteger(n) && n >= 0 && n < STEPS.length ? n : 0
+    const n = Number(localStorage.getItem(storeKey(mode, rules)))
+    return Number.isInteger(n) && n >= 0 && n < RULESETS[rules].steps.length ? n : 0
   } catch {
     return 0
   }
 }
 
-export function Tutorial({ mode, onClose, onPlay }: { mode: TutorialMode; onClose: () => void; onPlay: () => void }) {
-  const [index, setIndex] = useState(() => loadStep(mode))
+export function Tutorial({
+  mode,
+  rules,
+  onClose,
+  onPlay,
+  onSwitchRules,
+}: {
+  mode: TutorialMode
+  rules: RulesId
+  onClose: () => void
+  onPlay: () => void
+  onSwitchRules: (r: RulesId) => void
+}) {
+  const ruleset = RULESETS[rules]
+  const STEPS = ruleset.steps
+  const [index, setIndex] = useState(() => loadStep(mode, rules))
   const [doneSet, setDoneSet] = useState<Set<number>>(new Set())
   const step = STEPS[index]
   const done = !step.task || doneSet.has(index)
@@ -24,46 +39,232 @@ export function Tutorial({ mode, onClose, onPlay }: { mode: TutorialMode; onClos
 
   useEffect(() => {
     try {
-      localStorage.setItem(storeKey(mode), String(index))
+      localStorage.setItem(storeKey(mode, rules), String(index))
     } catch {
       /* 保存できなくても続ける */
     }
     window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [index, mode])
+  }, [index, mode, rules])
 
-  const go = useCallback((n: number) => setIndex(Math.max(0, Math.min(STEPS.length - 1, n))), [])
-  const markDone = useCallback(() => setDoneSet((s) => new Set(s).add(index)), [index])
+  const go = useCallback((n: number) => setIndex(Math.max(0, Math.min(STEPS.length - 1, n))), [STEPS.length])
+  // やり終えた瞬間に紙吹雪を出す
+  const [burst, setBurst] = useState(0)
+  const markDone = useCallback(() => {
+    if (doneSet.has(index)) return
+    setDoneSet((s) => new Set(s).add(index))
+    setBurst((b) => b + 1)
+  }, [index, doneSet])
 
   const Stage = step.Stage
   const stage = (
-    <section className="relative overflow-hidden rounded-[4px] bg-teal-board p-3 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.5)] sm:p-4">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.07]"
-        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '14px 14px' }}
-      />
-      <div className="relative">
-        <Stage key={index} done={done} onDone={markDone} />
-      </div>
-    </section>
+    <TiltStage>
+      <section className="relative overflow-hidden rounded-[4px] bg-teal-board p-3 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.5)] sm:p-4 lg:p-5">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '14px 14px' }}
+        />
+        {/* PC: 舞台の上に章番号を大きく */}
+        <div key={`h${index}`} className="relative mb-3 hidden animate-fade items-end gap-3 text-white lg:flex">
+          <span className="text-5xl leading-none font-black text-transparent [-webkit-text-stroke:1.5px_rgba(255,255,255,0.55)]">
+            {String(step.chapter + 1).padStart(2, '0')}
+          </span>
+          <span className="pb-0.5">
+            <span className="block text-[11px] font-black tracking-[0.25em] text-amber-200">{ruleset.chapters[step.chapter]}</span>
+            <span className="block text-lg leading-tight font-black">{step.title}</span>
+          </span>
+          <span className="mb-2 h-px flex-1 bg-white/25" />
+          <span className="pb-0.5 text-xs font-bold text-white/60 tabular-nums">
+            {index + 1} / {STEPS.length}
+          </span>
+        </div>
+        <div className="relative">
+          <Stage key={index} done={done} onDone={markDone} />
+        </div>
+        {burst > 0 && <Burst key={burst} />}
+      </section>
+    </TiltStage>
   )
 
+  const t = ruleset.theme
+  const layout: LayoutProps = {
+    index,
+    done,
+    last,
+    stage,
+    doneSet,
+    onJump: go,
+    onPrev: () => go(index - 1),
+    onNext: () => go(index + 1),
+    onPlay,
+    onRestart: () => go(0),
+  }
   return (
-    <div className={`min-h-dvh ${mode === 'maro' ? 'bg-[#efe3cc]' : 'bg-[#f4efe4]'}`}>
-      <ProgressHeader mode={mode} index={index} onJump={go} onClose={onClose} />
-      {mode === 'guide' ? (
-        <GuideLayout index={index} done={done} last={last} stage={stage} onPrev={() => go(index - 1)} onNext={() => go(index + 1)} onPlay={onPlay} onRestart={() => go(0)} />
-      ) : (
-        <MaroLayout index={index} done={done} last={last} stage={stage} onPrev={() => go(index - 1)} onNext={() => go(index + 1)} onPlay={onPlay} onRestart={() => go(0)} />
-      )}
+    <RulesContext.Provider value={ruleset}>
+      <div
+        className="relative min-h-dvh overflow-x-clip"
+        style={{ ['--color-teal-board' as string]: t.board, background: mode === 'maro' ? t.maroBg : t.guideBg }}
+      >
+        {/* PC: うしろでゆっくり動く色のにじみ */}
+        <div aria-hidden className="pointer-events-none fixed inset-0 hidden lg:block">
+          <span className="absolute -top-24 -left-24 h-[28rem] w-[28rem] animate-[float_14s_ease-in-out_infinite] rounded-full bg-teal-board opacity-[0.14] blur-3xl" />
+          <span
+            className="absolute -right-32 bottom-0 h-[32rem] w-[32rem] animate-[float_18s_ease-in-out_infinite] rounded-full opacity-[0.12] blur-3xl"
+            style={{ background: t.accent, ['--fx' as string]: '-40px', ['--fy' as string]: '30px' }}
+          />
+          <span className="absolute top-1/3 left-1/2 h-80 w-80 animate-[float_22s_ease-in-out_infinite] rounded-full bg-amber-300 opacity-[0.12] blur-3xl" />
+        </div>
+        <div className="relative">
+          <ProgressHeader mode={mode} index={index} onJump={go} onClose={onClose} onSwitchRules={onSwitchRules} />
+          {mode === 'guide' ? <GuideLayout {...layout} /> : <MaroLayout {...layout} />}
+        </div>
+      </div>
+    </RulesContext.Provider>
+  )
+}
+
+// ---------------------------------------------------------------- PC の演出
+
+/** マウスに合わせて、舞台がほんの少し手前に傾く（PCのみ） */
+function TiltStage({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [enabled] = useState(() => {
+    try {
+      return window.matchMedia('(hover: hover) and (min-width: 1024px) and (prefers-reduced-motion: no-preference)').matches
+    } catch {
+      return false
+    }
+  })
+  const [tilt, setTilt] = useState({ x: 0, y: 0, gx: 50, gy: 50, on: false })
+  if (!enabled) return <>{children}</>
+  return (
+    <div
+      ref={ref}
+      className="[perspective:1400px]"
+      onPointerMove={(e) => {
+        if (e.pointerType !== 'mouse' || e.buttons) return
+        const r = ref.current!.getBoundingClientRect()
+        const px = (e.clientX - r.left) / r.width
+        const py = (e.clientY - r.top) / r.height
+        setTilt({ x: (0.5 - py) * 3, y: (px - 0.5) * 4, gx: px * 100, gy: py * 100, on: true })
+      }}
+      onPointerLeave={() => setTilt((t) => ({ ...t, x: 0, y: 0, on: false }))}
+    >
+      <div className="relative transition-transform duration-300 ease-out" style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` }}>
+        {children}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-[4px] transition-opacity duration-300"
+          style={{
+            opacity: tilt.on ? 1 : 0,
+            background: `radial-gradient(circle at ${tilt.gx}% ${tilt.gy}%, rgba(255,255,255,0.14), transparent 45%)`,
+          }}
+        />
+      </div>
     </div>
+  )
+}
+
+const BURST_COLORS = ['#fcd34d', '#f87171', '#34d399', '#60a5fa', '#f9a8d4', '#ffffff']
+
+/** やり終えたときの紙吹雪と「見事！」 */
+function Burst() {
+  const [bits] = useState(() =>
+    Array.from({ length: 26 }, (_, i) => {
+      const a = (i / 26) * Math.PI * 2 + Math.random() * 0.4
+      const d = 90 + Math.random() * 140
+      return { dx: Math.cos(a) * d, dy: Math.sin(a) * d - 40, r: Math.random() * 540 - 270, c: BURST_COLORS[i % BURST_COLORS.length], w: 6 + Math.random() * 6, delay: Math.random() * 120 }
+    }),
+  )
+  const [show, setShow] = useState(true)
+  useEffect(() => {
+    const t = setTimeout(() => setShow(false), 1300)
+    return () => clearTimeout(t)
+  }, [])
+  if (!show) return null
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-40 overflow-hidden">
+      {bits.map((b, i) => (
+        <span
+          key={i}
+          className="absolute top-1/2 left-1/2 rounded-[1px]"
+          style={{
+            width: b.w,
+            height: b.w * 0.45,
+            background: b.c,
+            ['--dx' as string]: `${b.dx}px`,
+            ['--dy' as string]: `${b.dy}px`,
+            ['--r' as string]: `${b.r}deg`,
+            animation: `burst 1s cubic-bezier(0.15, 0.7, 0.3, 1) ${b.delay}ms both`,
+          }}
+        />
+      ))}
+      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+        <span className="block animate-pop rounded-[3px] border-4 border-amber-300 bg-[#8b1e1e] px-4 py-1 text-2xl font-black tracking-widest text-amber-100 shadow-2xl">
+          見事！
+        </span>
+      </span>
+    </div>
+  )
+}
+
+/** PC: 章と手順の目次 */
+function Toc({ index, doneSet, onJump }: { index: number; doneSet: Set<number>; onJump: (n: number) => void }) {
+  const { steps, chapters } = useRules()
+  return (
+    <nav aria-label="目次" className="sticky top-32 hidden max-h-[calc(100dvh-9rem)] overflow-y-auto pr-1 xl:block">
+      <ol className="flex flex-col gap-3">
+        {chapters.map((name, c) => (
+          <li key={name}>
+            <p className="mb-1 flex items-center gap-1.5 text-[11px] font-black tracking-widest text-stone-500">
+              <span className="flex h-5 w-5 items-center justify-center rounded-[2px] bg-teal-board text-[10px] text-white">{c + 1}</span>
+              {name}
+            </p>
+            <ol className="flex flex-col gap-0.5 border-l-2 border-stone-300/70 pl-2">
+              {steps.map((s, i) =>
+                s.chapter !== c ? null : (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      onClick={() => onJump(i)}
+                      className={`flex w-full items-center gap-1.5 rounded-[3px] px-2 py-1 text-left text-[12px] leading-snug font-bold transition-all duration-200 ${
+                        i === index ? 'translate-x-1 bg-teal-board text-white shadow' : 'text-stone-600 hover:translate-x-1 hover:bg-white/70'
+                      }`}
+                    >
+                      <span className="w-3 shrink-0 text-center">{doneSet.has(i) ? '✓' : s.task ? '◇' : '・'}</span>
+                      <span className="truncate">{s.title}</span>
+                    </button>
+                  </li>
+                ),
+              )}
+            </ol>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-4 text-[11px] text-stone-400">◇ はやってみるステップ ・ ← → キーで移動</p>
+    </nav>
   )
 }
 
 // ---------------------------------------------------------------- 上部の進み具合
 
-function ProgressHeader({ mode, index, onJump, onClose }: { mode: TutorialMode; index: number; onJump: (n: number) => void; onClose: () => void }) {
+function ProgressHeader({
+  mode,
+  index,
+  onJump,
+  onClose,
+  onSwitchRules,
+}: {
+  mode: TutorialMode
+  index: number
+  onJump: (n: number) => void
+  onClose: () => void
+  onSwitchRules: (r: RulesId) => void
+}) {
+  const { steps: STEPS, chapters: CHAPTERS, id, name: rulesName, theme } = useRules()
   const step = STEPS[index]
+  const [popOpen, setPopOpen] = useState(true)
+  const other: RulesId = id === 'short' ? 'full' : 'short'
   return (
     <header className="sticky top-0 z-30 border-b border-black/10 bg-white/90 backdrop-blur">
       <div className="mx-auto max-w-5xl px-3 pt-2 pb-2.5">
@@ -71,11 +272,37 @@ function ProgressHeader({ mode, index, onJump, onClose }: { mode: TutorialMode; 
           <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-[3px] text-lg text-stone-500 hover:bg-stone-100" aria-label="閉じる">
             ✕
           </button>
-          <p className="min-w-0 flex-1 truncate text-sm font-black text-stone-800">{mode === 'guide' ? 'ルールガイド' : 'まろいぬに教わる'}</p>
+          <p className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm font-black text-stone-800">
+            {mode === 'guide' ? 'ルールガイド' : 'まろいぬに教わる'}
+            <span className="shrink-0 rounded-[2px] bg-teal-board px-1.5 py-0.5 text-[10px] leading-none text-white">{rulesName}</span>
+          </p>
           <p className="text-xs font-bold text-stone-400 tabular-nums">
             {index + 1} / {STEPS.length}
           </p>
         </div>
+        {popOpen && (
+          <div className="mb-2 flex animate-pop items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onSwitchRules(other)}
+              className="group relative flex min-w-0 flex-1 items-center gap-2 rounded-[4px] border-2 bg-[#fffaf0] py-1 pr-3 pl-1 text-left shadow-[0_3px_0_rgba(0,0,0,0.12)] transition hover:-translate-y-0.5 active:translate-y-0"
+              style={{ borderColor: theme.accent }}
+            >
+              <img src={face} alt="" className="h-8 w-8 shrink-0 animate-[talk_0.9s_ease-in-out_infinite_alternate] rounded-[3px] object-cover" />
+              <span className="min-w-0 truncate text-[13px] font-black text-stone-800">
+                {other === 'full' ? '通常版' : '短縮版'}のルールは
+                <mark className="mx-0.5 rounded-[2px] bg-[linear-gradient(transparent_55%,#fcd34d_55%)] px-0.5 text-inherit">ここを押す</mark>
+                まろ！
+              </span>
+              <span className="ml-auto shrink-0 text-lg transition group-hover:translate-x-1" style={{ color: theme.accent }}>
+                →
+              </span>
+            </button>
+            <button type="button" onClick={() => setPopOpen(false)} className="h-8 w-8 shrink-0 rounded-[3px] text-sm text-stone-400 hover:bg-stone-100" aria-label="案内を閉じる">
+              ✕
+            </button>
+          </div>
+        )}
         <ol className="flex gap-1" aria-label="章">
           {CHAPTERS.map((name, c) => {
             const steps = STEPS.map((s, i) => [s, i] as const).filter(([s]) => s.chapter === c)
@@ -104,6 +331,7 @@ function ProgressHeader({ mode, index, onJump, onClose }: { mode: TutorialMode; 
 }
 
 function ChapterTag({ index }: { index: number }) {
+  const { steps: STEPS, chapters: CHAPTERS } = useRules()
   const c = STEPS[index].chapter
   return (
     <p className="flex items-center gap-2 text-[11px] font-black tracking-[0.2em] text-amber-700">
@@ -120,6 +348,8 @@ type LayoutProps = {
   done: boolean
   last: boolean
   stage: React.ReactNode
+  doneSet: Set<number>
+  onJump: (n: number) => void
   onPrev: () => void
   onNext: () => void
   onPlay: () => void
@@ -139,13 +369,14 @@ function useKeys(onPrev: () => void, onNext: () => void) {
 }
 
 function EndButtons({ onPlay, onRestart }: { onPlay: () => void; onRestart: () => void }) {
+  const { id } = useRules()
   return (
     <div className="flex gap-2">
       <button type="button" onClick={onRestart} className="rounded-[3px] border-2 border-stone-300 bg-white px-4 py-3 text-sm font-bold text-stone-600">
         最初から
       </button>
       <button type="button" onClick={onPlay} className="flex-1 rounded-[3px] bg-amber-600 px-4 py-3 font-black text-white shadow-md active:scale-[0.98]">
-        ゲームをはじめる →
+        {id === 'full' ? 'ゲームをはじめる（いまは短縮版）→' : 'ゲームをはじめる →'}
       </button>
     </div>
   )
@@ -153,17 +384,22 @@ function EndButtons({ onPlay, onRestart }: { onPlay: () => void; onRestart: () =
 
 // ---------------------------------------------------------------- ルールガイド版
 
-function GuideLayout({ index, done, last, stage, onPrev, onNext, onPlay, onRestart }: LayoutProps) {
+const MAIN_GRID =
+  'mx-auto grid max-w-5xl gap-3 px-3 pt-3 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6 lg:px-6 lg:pt-6 lg:pb-10 xl:max-w-[1400px] xl:grid-cols-[230px_minmax(0,1fr)_400px]'
+
+function GuideLayout({ index, done, last, stage, doneSet, onJump, onPrev, onNext, onPlay, onRestart }: LayoutProps) {
+  const { steps: STEPS } = useRules()
   const step = STEPS[index]
   useKeys(onPrev, onNext)
   return (
     <>
-      <main className="mx-auto grid max-w-5xl gap-4 px-3 pt-3 pb-28 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:pb-10">
-        <div className="lg:sticky lg:top-24">{stage}</div>
-        <article key={index} className="flex animate-fade flex-col gap-3">
+      <main className={`${MAIN_GRID} pb-28`}>
+        <Toc index={index} doneSet={doneSet} onJump={onJump} />
+        <div className="lg:sticky lg:top-32">{stage}</div>
+        <article key={index} className="flex animate-fade flex-col gap-3 lg:sticky lg:top-32">
           <ChapterTag index={index} />
-          <h2 className="text-2xl leading-tight font-black text-stone-900">{step.title}</h2>
-          <div className="flex flex-col gap-2 text-[15px] leading-relaxed text-stone-700">
+          <h2 className="text-2xl leading-tight font-black text-stone-900 lg:text-3xl">{step.title}</h2>
+          <div className="flex flex-col gap-2 text-[15px] leading-relaxed text-stone-700 lg:text-base lg:leading-loose">
             {step.body.map((p, i) => (
               <p key={i}>
                 <Rich text={p} />
@@ -182,6 +418,10 @@ function GuideLayout({ index, done, last, stage, onPrev, onNext, onPlay, onResta
           )}
           <div className="hidden lg:block">
             <NavButtons index={index} done={done} last={last} onPrev={onPrev} onNext={onNext} onPlay={onPlay} onRestart={onRestart} />
+            <p className="mt-2 text-center text-[11px] text-stone-400">
+              <kbd className="rounded-[2px] border border-stone-300 bg-white px-1">←</kbd> <kbd className="rounded-[2px] border border-stone-300 bg-white px-1">→</kbd>{' '}
+              キーでも移動できます
+            </p>
           </div>
         </article>
       </main>
@@ -192,7 +432,7 @@ function GuideLayout({ index, done, last, stage, onPrev, onNext, onPlay, onResta
   )
 }
 
-function NavButtons({ index, done, last, onPrev, onNext, onPlay, onRestart }: Omit<LayoutProps, 'stage'>) {
+function NavButtons({ index, done, last, onPrev, onNext, onPlay, onRestart }: Omit<LayoutProps, 'stage' | 'doneSet' | 'onJump'>) {
   if (last) return <EndButtons onPlay={onPlay} onRestart={onRestart} />
   return (
     <div className="flex gap-2">
@@ -219,7 +459,8 @@ function NavButtons({ index, done, last, onPrev, onNext, onPlay, onRestart }: Om
 
 // ---------------------------------------------------------------- まろいぬ版
 
-function MaroLayout({ index, done, last, stage, onPrev, onNext, onPlay, onRestart }: LayoutProps) {
+function MaroLayout({ index, done, last, stage, doneSet, onJump, onPrev, onNext, onPlay, onRestart }: LayoutProps) {
+  const { steps: STEPS, chapters: CHAPTERS } = useRules()
   const step = STEPS[index]
   const lines = done && step.task && step.praise ? [...step.maro, step.praise] : step.maro
   const [line, setLine] = useState(0)
@@ -268,28 +509,12 @@ function MaroLayout({ index, done, last, stage, onPrev, onNext, onPlay, onRestar
   }, [line, onPrev])
   useKeys(back, advance)
 
-  // しゃべっている間は、画面のどこを押しても次へ進む
-  const talking = typing || !atEnd
-  // しゃべり終えたあとも、ボタン以外の場所を押せば次のステップへ（盤面のボタンはそのまま使える）
-  const onBackgroundClick = (e: React.MouseEvent) => {
-    if ((e.target as Element).closest('button, a, input, select, label, [role="button"]')) return
-    if (talking) advance()
-    else if (done && !last) onNext()
-  }
-
   return (
-    <div onClick={onBackgroundClick}>
-      {talking && (
-        <button
-          type="button"
-          onClick={advance}
-          className="fixed inset-0 z-20 cursor-pointer bg-transparent"
-          aria-label="続きを読む（画面のどこを押しても進みます）"
-        />
-      )}
-      <main className="mx-auto grid max-w-5xl gap-3 px-3 pt-3 pb-56 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:pb-10">
-        <div className="flex flex-col gap-2 lg:sticky lg:top-24">
-          <div key={index} className="flex animate-fade items-baseline gap-2">
+    <div>
+      <main className={`${MAIN_GRID} pb-56`}>
+        <Toc index={index} doneSet={doneSet} onJump={onJump} />
+        <div className="flex flex-col gap-2 lg:sticky lg:top-32">
+          <div key={index} className="flex animate-fade items-baseline gap-2 lg:hidden">
             <span className="shrink-0 rounded-[2px] bg-[#8b1e1e] px-2 py-0.5 text-[11px] font-black text-white">
               第{step.chapter + 1}章 {CHAPTERS[step.chapter]}
             </span>
@@ -297,8 +522,22 @@ function MaroLayout({ index, done, last, stage, onPrev, onNext, onPlay, onRestar
           </div>
           {stage}
         </div>
-        <div className="fixed inset-x-0 bottom-0 z-30 lg:sticky lg:top-24 lg:bottom-auto lg:mt-9">
+        <div className="fixed inset-x-0 bottom-0 z-30 lg:sticky lg:top-32 lg:bottom-auto">
           <div>
+          {/* PC: まろいぬの全身 */}
+          <div className="relative mb-3 hidden overflow-hidden rounded-[4px] border-4 border-[#8b1e1e] bg-[#dfe8f0] shadow-xl lg:block">
+            <img
+              src={maroinu}
+              alt="まろいぬ"
+              className={`h-64 w-full object-cover object-[50%_20%] ${typing ? 'animate-[talk_0.3s_ease-in-out_infinite_alternate]' : 'animate-[bob_3.5s_ease-in-out_infinite]'}`}
+            />
+            <span className="absolute bottom-2 left-2 rounded-[2px] bg-[#8b1e1e] px-2 py-1 text-xs font-black tracking-widest text-white shadow">お殿様 まろいぬ</span>
+            {done && step.task && (
+              <span key={index} className="absolute top-2 right-2 animate-pop rounded-[3px] bg-amber-300 px-2 py-1 text-sm font-black text-stone-900 shadow">
+                天晴れ！
+              </span>
+            )}
+          </div>
           {waiting && step.task && (
             <p className="mx-3 mb-2 flex animate-rise items-center gap-2 rounded-[3px] bg-amber-400 px-3 py-2 text-sm font-black text-stone-900 shadow-lg lg:mx-0">
               <span className="animate-bounce">👆</span>
@@ -307,25 +546,20 @@ function MaroLayout({ index, done, last, stage, onPrev, onNext, onPlay, onRestar
           )}
           <div className="border-t-4 border-[#8b1e1e] bg-[#fffaf0] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.18)] lg:rounded-[4px] lg:border-4 lg:border-t-[6px]">
             <div className="flex items-start gap-3">
-              <div className="flex shrink-0 flex-col items-center gap-1">
+              <div className="flex shrink-0 flex-col items-center gap-1 lg:hidden">
                 <img
                   src={face}
                   alt="まろいぬ"
-                  className={`h-16 w-16 rounded-[4px] border-2 border-[#8b1e1e] object-cover shadow lg:h-24 lg:w-24 ${typing ? 'animate-[talk_0.28s_ease-in-out_infinite_alternate]' : ''}`}
+                  className={`h-16 w-16 rounded-[4px] border-2 border-[#8b1e1e] object-cover shadow ${typing ? 'animate-[talk_0.28s_ease-in-out_infinite_alternate]' : ''}`}
                 />
                 <span className="rounded-[2px] bg-[#8b1e1e] px-1.5 py-0.5 text-[10px] leading-none font-black text-white">まろいぬ</span>
               </div>
               <button type="button" onClick={advance} className="relative min-h-[5.5rem] flex-1 text-left" aria-label="続きを読む">
-                <span className="block text-[15px] leading-relaxed font-bold text-stone-800 lg:text-base">
+                <span className="block text-[15px] leading-relaxed font-bold text-stone-800 lg:text-lg lg:leading-relaxed">
                   <Rich text={text} limit={count} />
                   {typing && <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-stone-500" />}
                 </span>
-                {!typing && (!atEnd || (done && !last)) && (
-                  <span className="absolute right-0 bottom-0 flex items-center gap-1 text-[10px] font-bold text-[#8b1e1e]/70">
-                    どこでもタップ
-                    <span className="animate-bounce text-xs text-[#8b1e1e]">▼</span>
-                  </span>
-                )}
+                {!typing && (!atEnd || (done && !last)) && <span className="absolute right-0 bottom-0 animate-bounce text-xs text-[#8b1e1e]">▼</span>}
               </button>
             </div>
             <div className="mt-2 flex items-center gap-2">

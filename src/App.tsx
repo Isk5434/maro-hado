@@ -4,11 +4,13 @@ import maroinu from './assets/game/maroinu.jpg'
 import { PLAYER_COLORS } from './components/colors'
 import { GameScreen } from './components/GameScreen'
 import { useStore } from './store'
+import type { RulesId } from './tutorial/rulesets'
 import { Tutorial, type TutorialMode } from './tutorial/Tutorial'
 
 const DEFAULT_NAMES = ['プレイヤー1', 'プレイヤー2', 'プレイヤー3', 'プレイヤー4']
 
-function Setup({ onLearn }: { onLearn: (m: TutorialMode) => void }) {
+function Setup({ onLearn }: { onLearn: (m: TutorialMode, r: RulesId) => void }) {
+  const [rules, setRules] = useState<RulesId>('short')
   const start = useStore((s) => s.start)
   const [count, setCount] = useState(4)
   const [names, setNames] = useState(DEFAULT_NAMES)
@@ -35,9 +37,42 @@ function Setup({ onLearn }: { onLearn: (m: TutorialMode) => void }) {
           はじめての人は、まずルールを
           <span className="h-px flex-1 bg-stone-300" />
         </h2>
+        <div className="relative mt-9 grid grid-cols-2 gap-1 rounded-[4px] bg-stone-200 p-1" role="tablist" aria-label="ルールの版">
+          {rules === 'short' && (
+            <button
+              type="button"
+              onClick={() => setRules('full')}
+              className="absolute -top-10 right-0 flex animate-pop items-center gap-1.5 rounded-[4px] border-2 border-[#a3302a] bg-[#fffaf0] py-0.5 pr-2.5 pl-0.5 text-xs font-black text-stone-800 shadow-[0_3px_0_rgba(0,0,0,0.12)] transition hover:-translate-y-0.5"
+            >
+              <img src={face} alt="" className="h-7 w-7 animate-[talk_0.9s_ease-in-out_infinite_alternate] rounded-[3px] object-cover" />
+              通常版は<mark className="rounded-[2px] bg-[linear-gradient(transparent_55%,#fcd34d_55%)] px-0.5 text-inherit">ここを押す</mark>まろ！
+              <span aria-hidden className="absolute -bottom-[7px] right-[24%] h-3 w-3 rotate-45 border-r-2 border-b-2 border-[#a3302a] bg-[#fffaf0]" />
+            </button>
+          )}
+          {(
+            [
+              ['short', '短縮版', 'すぐ遊べる短いルール'],
+              ['full', '通常版', '寺・僧・祭・特殊効果あり'],
+            ] as const
+          ).map(([id, name, sub]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={rules === id}
+              onClick={() => setRules(id)}
+              className={`rounded-[3px] px-2 py-1.5 text-center transition ${rules === id ? 'bg-white shadow' : 'text-stone-500 hover:text-stone-700'}`}
+            >
+              <b className="block text-sm" style={rules === id ? { color: id === 'full' ? '#273a6b' : '#1f4e4a' } : undefined}>
+                {name}
+              </b>
+              <span className="block text-[10px]">{sub}</span>
+            </button>
+          ))}
+        </div>
         <button
           type="button"
-          onClick={() => onLearn('maro')}
+          onClick={() => onLearn('maro', rules)}
           className="group flex items-center gap-3 rounded-[4px] border-l-4 border-[#8b1e1e] bg-[#fffaf0] p-3 text-left shadow transition hover:-translate-y-0.5 hover:shadow-md"
         >
           <img src={face} alt="" className="h-14 w-14 shrink-0 rounded-[4px] border-2 border-[#8b1e1e] object-cover transition group-hover:rotate-[-3deg]" />
@@ -49,13 +84,13 @@ function Setup({ onLearn }: { onLearn: (m: TutorialMode) => void }) {
         </button>
         <button
           type="button"
-          onClick={() => onLearn('guide')}
+          onClick={() => onLearn('guide', rules)}
           className="group flex items-center gap-3 rounded-[4px] border-l-4 border-teal-board bg-white p-3 text-left shadow transition hover:-translate-y-0.5 hover:shadow-md"
         >
           <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[4px] bg-teal-board text-2xl text-white">📖</span>
           <span className="min-w-0 flex-1">
             <b className="block text-base text-stone-900">ルールガイド</b>
-            <span className="text-xs text-stone-600">図を動かしながら、ルールブックの順に7章で</span>
+            <span className="text-xs text-stone-600">図を動かしながら、ルールブックの順に{rules === 'short' ? '7' : '8'}章で</span>
           </span>
           <span className="text-xl text-teal-board transition group-hover:translate-x-1">→</span>
         </button>
@@ -104,13 +139,15 @@ function Setup({ onLearn }: { onLearn: (m: TutorialMode) => void }) {
 
 export default function App() {
   const game = useStore((s) => s.game)
-  const [learn, setLearn] = useState<TutorialMode | null>(null)
+  const [learn, setLearn] = useState<{ mode: TutorialMode; rules: RulesId } | null>(null)
   if (game) return <GameScreen />
   if (learn)
     return (
       <Tutorial
-        key={learn}
-        mode={learn}
+        key={`${learn.mode}-${learn.rules}`}
+        mode={learn.mode}
+        rules={learn.rules}
+        onSwitchRules={(rules) => setLearn({ ...learn, rules })}
         onClose={() => setLearn(null)}
         onPlay={() => {
           setLearn(null)
@@ -118,5 +155,5 @@ export default function App() {
         }}
       />
     )
-  return <Setup onLearn={setLearn} />
+  return <Setup onLearn={(mode, rules) => setLearn({ mode, rules })} />
 }

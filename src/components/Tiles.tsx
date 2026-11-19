@@ -8,8 +8,10 @@ import cardInn from '../assets/game/card-inn.jpg'
 import cardL from '../assets/game/card-L.jpg'
 import cardStraight from '../assets/game/card-straight.jpg'
 import cardT from '../assets/game/card-T.jpg'
+import cardTemple from '../assets/game/card-temple.jpg'
 import pieceFarmer from '../assets/game/piece-farmer.png'
 import pieceMerchant from '../assets/game/piece-merchant.png'
+import pieceMonk from '../assets/game/piece-monk.png'
 import pieceSamurai from '../assets/game/piece-samurai.png'
 import tileFort from '../assets/game/tile-fort.jpg'
 import tileGoal from '../assets/game/tile-goal.jpg'
@@ -24,6 +26,7 @@ const CARD_IMAGE: Record<CardKind, string> = {
   cross: cardCross,
   farm: cardFarm,
   inn: cardInn,
+  temple: cardTemple,
   battle: cardBattle,
   flood: cardFlood,
 }
@@ -38,12 +41,14 @@ const PIECE_IMAGE: Record<PieceKind, string> = {
   farmer: pieceFarmer,
   merchant: pieceMerchant,
   samurai: pieceSamurai,
+  monk: pieceMonk,
 }
 
 export const PIECE_COLOR: Record<PieceKind, string> = {
   farmer: '#c9962b',
   merchant: '#2f6fb3',
   samurai: '#b23a33',
+  monk: '#6b5b95',
 }
 
 export function CardImage({ card, rot = 0, className = '' }: { card: Card; rot?: number; className?: string }) {

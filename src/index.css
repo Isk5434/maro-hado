@@ -69,3 +69,17 @@ body {
   from { transform: translateY(0) rotate(-1.5deg); }
   to { transform: translateY(-2px) rotate(1.5deg); }
 }
+
+@keyframes burst {
+  0% { transform: translate(-50%, -50%) scale(0.4) rotate(0deg); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1) rotate(var(--r)); opacity: 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(var(--fx, 30px), var(--fy, -20px)) scale(1.06); }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}

@@ -88,6 +88,11 @@ export function neighbors4(x: number, y: number): [number, number][] {
   ].filter(([a, b]) => inBounds(a, b)) as [number, number][]
 }
 
+/** 村のふち（四辺）のマス */
+export function isEdge(x: number, y: number): boolean {
+  return x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1
+}
+
 export function isWater(cell: Cell): boolean {
   return cell.terrain === 'river' || cell.flooded
 }
@@ -132,6 +137,8 @@ export function canPlaceCard(v: Village, card: Card, x: number, y: number, rot?:
   if (cell.placed) return false
   if (cell.terrain === 'goal' || cell.terrain === 'start' || cell.terrain === 'fort') return false
   if (isWater(cell) && card.kind !== 'straight') return false
+  // 寺カード（通常版）は村のふち（四辺）にしか置けない
+  if (card.kind === 'temple' && !isEdge(x, y)) return false
   if (!neighbors4(x, y).some(([a, b]) => isAnchor(v, a, b))) return false
   if (!hasRoad(card)) return true
   if (rot !== undefined) return linksToRoad(v, card, x, y, rot)
