@@ -3,6 +3,7 @@ import face from './assets/game/maroinu-face.jpg'
 import maroinu from './assets/game/maroinu.jpg'
 import { PLAYER_COLORS } from './components/colors'
 import { GameScreen } from './components/GameScreen'
+import { RotateHint } from './components/RotateHint'
 import { useStore } from './store'
 import type { RulesId } from './tutorial/rulesets'
 import { Tutorial, type TutorialMode } from './tutorial/Tutorial'
@@ -16,8 +17,8 @@ function Setup({ onLearn }: { onLearn: (m: TutorialMode, r: RulesId) => void }) 
   const [names, setNames] = useState(DEFAULT_NAMES)
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-4 px-4 pt-4 pb-8">
-      <div className="overflow-hidden rounded-[4px] bg-teal-board text-white shadow-lg">
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-4 px-4 pt-4 pb-8 landscape:md:grid landscape:md:max-w-5xl landscape:md:grid-cols-2 landscape:md:items-start landscape:md:gap-x-8 landscape:md:px-8 landscape:md:pt-8">
+      <div className="overflow-hidden rounded-[4px] bg-teal-board text-white shadow-lg landscape:md:col-start-1">
         <div className="relative">
           <img src={maroinu} alt="まろいぬ" className="aspect-[4/3] w-full object-cover object-[50%_25%]" />
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-teal-board via-teal-board/70 to-transparent px-5 pt-12 pb-3">
@@ -32,7 +33,7 @@ function Setup({ onLearn }: { onLearn: (m: TutorialMode, r: RulesId) => void }) 
         </p>
       </div>
 
-      <section aria-labelledby="learn" className="flex flex-col gap-2">
+      <section aria-labelledby="learn" className="flex flex-col gap-2 landscape:md:col-start-1">
         <h2 id="learn" className="flex items-center gap-2 text-sm font-black text-stone-700">
           はじめての人は、まずルールを
           <span className="h-px flex-1 bg-stone-300" />
@@ -96,7 +97,7 @@ function Setup({ onLearn }: { onLearn: (m: TutorialMode, r: RulesId) => void }) 
         </button>
       </section>
 
-      <section className="rounded-[3px] bg-white p-4 shadow">
+      <section className="rounded-[3px] bg-white p-4 shadow landscape:md:sticky landscape:md:top-8 landscape:md:col-start-2 landscape:md:row-span-2 landscape:md:row-start-1 landscape:md:p-6">
         <h2 className="mb-2 font-black">人数</h2>
         <div className="grid grid-cols-3 gap-2">
           {[2, 3, 4].map((n) => (
@@ -138,6 +139,15 @@ function Setup({ onLearn }: { onLearn: (m: TutorialMode, r: RulesId) => void }) 
 }
 
 export default function App() {
+  return (
+    <>
+      <Screen />
+      <RotateHint />
+    </>
+  )
+}
+
+function Screen() {
   const game = useStore((s) => s.game)
   const [learn, setLearn] = useState<{ mode: TutorialMode; rules: RulesId } | null>(null)
   if (game) return <GameScreen />

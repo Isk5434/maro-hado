@@ -189,9 +189,9 @@ export function GameScreen() {
           </>
         )}
 
-        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_340px]">
           {/* 城の上 */}
-          <div className="lg:col-start-2 lg:row-start-1">
+          <div className="md:col-start-1 md:row-start-1 lg:col-start-2 lg:row-start-1">
             <CastlePanel
               game={game}
               phase={phase}
@@ -204,7 +204,7 @@ export function GameScreen() {
           </div>
 
           {/* 村 */}
-          <section className="lg:col-start-1 lg:row-span-4 lg:row-start-1">
+          <section className="md:col-span-2 md:row-start-2 lg:col-span-1 lg:col-start-1 lg:row-span-4 lg:row-start-1">
             <nav className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5" aria-label="村の切り替え">
               {game.players.map((p) => {
                 const active = shown === p.id
@@ -246,7 +246,7 @@ export function GameScreen() {
 
           {/* キープ */}
           {actorPlayer && (
-            <div className="lg:col-start-2">
+            <div className="md:col-start-2 md:row-start-1 md:self-stretch lg:col-start-2 lg:row-start-auto lg:self-auto">
               <KeepPanel
                 player={actorPlayer}
                 usable={keepUsable}
@@ -261,12 +261,12 @@ export function GameScreen() {
           )}
 
           {game.battle && (
-            <div className="lg:col-start-2">
+            <div className="md:col-span-2 lg:col-span-1 lg:col-start-2">
               <BattleResult game={game} />
             </div>
           )}
 
-          <details className="rounded-[3px] bg-white/70 p-3 text-sm lg:col-start-2">
+          <details className="rounded-[3px] bg-white/70 p-3 text-sm md:col-span-2 lg:col-span-1 lg:col-start-2">
             <summary className="cursor-pointer font-bold text-stone-600">これまでの記録</summary>
             <ol className="mt-2 max-h-60 space-y-0.5 overflow-y-auto text-xs text-stone-600">
               {game.log
@@ -596,7 +596,7 @@ function KeepPanel({
   onTogglePick: (k: string) => void
 }) {
   return (
-    <section className="rounded-[3px] border-2 border-[#b08850] bg-[#fbf3e2] p-3 text-[#5a3a1a] shadow-sm">
+    <section className="rounded-[3px] border-2 border-[#b08850] bg-[#fbf3e2] p-3 text-[#5a3a1a] shadow-sm md:h-full lg:h-auto">
       <PanelTitle icon="📦" title={`${player.name}のキープ`} sub={`カード${KEEP_LIMIT}枚・コマ${KEEP_LIMIT}個まで${usable ? '／押すと村に出せる' : ''}`} />
       <div className="flex items-end gap-2">
         {Array.from({ length: KEEP_LIMIT }).map((_, i) => {

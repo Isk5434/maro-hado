@@ -426,7 +426,9 @@ function GuideLayout({ index, done, last, stage, doneSet, onJump, onPrev, onNext
         </article>
       </main>
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/10 bg-white/95 px-3 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+        <div className="md:mx-auto md:max-w-3xl">
         <NavButtons index={index} done={done} last={last} onPrev={onPrev} onNext={onNext} onPlay={onPlay} onRestart={onRestart} />
+        </div>
       </div>
     </>
   )
@@ -523,7 +525,7 @@ function MaroLayout({ index, done, last, stage, doneSet, onJump, onPrev, onNext,
           {stage}
         </div>
         <div className="fixed inset-x-0 bottom-0 z-30 lg:sticky lg:top-32 lg:bottom-auto">
-          <div>
+          <div className="md:mx-auto md:max-w-3xl lg:max-w-none">
           {/* PC: まろいぬの全身 */}
           <div className="relative mb-3 hidden overflow-hidden rounded-[4px] border-4 border-[#8b1e1e] bg-[#dfe8f0] shadow-xl lg:block">
             <img
