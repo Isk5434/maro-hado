@@ -96,7 +96,7 @@ export function Tutorial({
     onJump: go,
     onPrev: () => go(index - 1),
     onNext: () => go(index + 1),
-    onPlay,
+    onPlay: rules === 'full' ? onClose : onPlay,
     onRestart: () => go(0),
   }
   return (
@@ -370,14 +370,18 @@ function useKeys(onPrev: () => void, onNext: () => void) {
 
 function EndButtons({ onPlay, onRestart }: { onPlay: () => void; onRestart: () => void }) {
   const { id } = useRules()
+  // 通常版のゲームはまだ無いので、通常版の説明の最後はタイトルに戻る（onPlay には閉じる処理が入る）
   return (
+    <div className="flex flex-col gap-1.5">
+    {id === 'full' && <p className="text-center text-[11px] text-stone-500">通常版のゲームは準備中です</p>}
     <div className="flex gap-2">
       <button type="button" onClick={onRestart} className="rounded-[3px] border-2 border-stone-300 bg-white px-4 py-3 text-sm font-bold text-stone-600">
         最初から
       </button>
       <button type="button" onClick={onPlay} className="flex-1 rounded-[3px] bg-amber-600 px-4 py-3 font-black text-white shadow-md active:scale-[0.98]">
-        {id === 'full' ? 'ゲームをはじめる（いまは短縮版）→' : 'ゲームをはじめる →'}
+        {id === 'full' ? 'タイトルにもどる' : 'ゲームをはじめる →'}
       </button>
+    </div>
     </div>
   )
 }

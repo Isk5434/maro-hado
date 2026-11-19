@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from 'react'
-import { isEdge } from '../game/board'
+import { isEdge, pieceCells } from '../game/board'
 import type { CardKind, Piece } from '../game/types'
 import festTownImg from '../assets/game/fest-town.jpg'
 import festVillageImg from '../assets/game/fest-village.jpg'
 import riceImg from '../assets/game/rice.png'
 import { CardImage, PieceImage } from '../components/Tiles'
 import { VillageBoard } from '../components/VillageBoard'
-import { C, FULL_ROAD, HandRow, Note, P, PlaceDemo, ROAD_PATH, makeVillage } from './kit'
+import { C, FULL_ROAD, HandRow, Note, P, PlaceDemo, ROAD_PATH, k, makeVillage } from './kit'
 import { FULL_SCORE_LABELS, scoreFull } from './fullScoring'
 import {
   AfterBattleStage,
@@ -62,7 +62,7 @@ const FULL_CARD_GROUPS: { name: string; tone: string; items: GalleryItem[] }[] =
     name: '場所カード',
     tone: 'text-emerald-200',
     items: [
-      { id: 'farm', name: '農地', count: '20', info: '道のない畑。農民をのせると1点＋お米ポイント1つ。4枚つながると3点', image: card('farm') },
+      { id: 'farm', name: '農地', count: '20', info: '道のない畑。上に農民 → 1点（お米ポイントも1つ）／ 4枚つなげる → 3点', image: card('farm') },
       { id: 'temple', name: '寺', count: '8', info: '村のふち（四辺）にしか置けない。僧をのせると3点、近くの宿場1つにつき1点', image: card('temple') },
       { id: 'inn', name: '宿場', count: '8', info: '十字の道としてつながる宿場町。商人をのせると2点', image: card('inn') },
     ],
@@ -126,40 +126,156 @@ function FullCardsStage() {
 
 const FullPiecesStage = makePiecesStage(['farmer', 'merchant', 'samurai', 'monk'], { farmer: 56, merchant: 28, samurai: 28, monk: 18 })
 
-function RiceStage({ onDone }: StageProps) {
-  const [v, setV] = useState(() => makeVillage([[6, 3, 'farm']]))
-  const [piece, setPiece] = useState<Piece | null>(() => P('farmer'))
-  const [rice, setRice] = useState(0)
+/** ② コマはカードの上に置く（どのコマも共通のきまり） */
+function PieceOnCardStage({ onDone }: StageProps) {
+  const [v, setV] = useState(() =>
+    makeVillage([
+      [6, 3, 'straight', 1],
+      [7, 2, 'farm'],
+      [6, 2, 'cross'],
+    ]),
+  )
+  const [piece, setPiece] = useState<Piece | null>(() => P('merchant'))
+  const [placedAt, setPlacedAt] = useState<string | null>(null)
+  const kindAt = (key: string) => {
+    const [x, y] = key.split(',').map(Number)
+    return v.cells[y][x].placed?.card.kind
+  }
   return (
     <div className="flex flex-col gap-2 text-white">
       <VillageBoard
         village={v}
-        targets={piece ? new Set(['6,3']) : undefined}
-        freshPieces={piece ? undefined : new Set(['6,3'])}
-        labels={{ '6,3': '農地' }}
+        targets={piece ? new Set(pieceCells(v).map(([x, y]) => k(x, y))) : undefined}
+        freshPieces={placedAt ? new Set([placedAt]) : undefined}
+        labels={{ '6,3': '直線', '7,2': '農地', '6,2': '十字', '7,3': '館' }}
         onCell={(x, y) => {
           const next = structuredClone(v)
           next.cells[y][x].placed!.piece = piece
           setV(next)
           setPiece(null)
-          setTimeout(() => setRice(1), 350)
+          setPlacedAt(k(x, y))
           onDone()
         }}
       />
       {piece && (
         <HandRow>
           <PieceImage piece={piece} className="w-12" />
-          <span className="text-xs font-bold">農民コマを、農地の上に置いてみよう</span>
+          <span className="text-xs font-bold">取った商人コマを、光っているカードのどれかに置こう</span>
         </HandRow>
       )}
-      <div className="flex items-center gap-3 rounded-[3px] bg-black/20 p-2.5">
-        <span className="text-xs font-black text-amber-200">お米ポイント置き場</span>
-        <span className="flex gap-1">
-          {rice > 0 ? <span className="animate-drop"><Rice className="w-9" /></span> : <span className="h-9 w-9 rounded-full border-2 border-dashed border-white/30" />}
-        </span>
-        <span className="ml-auto text-2xl font-black tabular-nums">{rice}</span>
+      {placedAt && (
+        <Note tone="good">
+          {kindAt(placedAt) === 'cross'
+            ? '十字の道に商人。これはあとで1点になる組み合わせです'
+            : `${kindAt(placedAt) === 'farm' ? '農地' : '直線'}に商人を置きました。商人は十字や宿場にいると点になります`}
+        </Note>
+      )}
+      <div className="grid grid-cols-2 gap-2 text-[12px] font-bold">
+        <p className="rounded-[3px] bg-emerald-600/80 p-2">◯ 自分の村の、カードの上に置く</p>
+        <p className="rounded-[3px] bg-rose-700/80 p-2">✕ 1枚のカードにコマは1つまで。空き地には置けない</p>
       </div>
-      {rice > 0 && <Note tone="good">農地＋農民で、お米ポイントを1つゲット！ 特殊効果カードに使えるし、残せば1つ1点</Note>}
+    </div>
+  )
+}
+
+/** 農地＋農民＝お米ポイント（通常版だけのきまり）。ちがう組み合わせと比べて試せる */
+function RiceStage({ onDone }: StageProps) {
+  const init = () =>
+    makeVillage([
+      [6, 3, 'farm'],
+      [7, 2, 'farm'],
+      [6, 2, 'straight', 0],
+    ])
+  const [v, setV] = useState(init)
+  const [kind, setKind] = useState<'farmer' | 'merchant'>('farmer')
+  const [rice, setRice] = useState(0)
+  const [last, setLast] = useState<{ key: string; ok: boolean; text: string } | null>(null)
+  const place = (x: number, y: number) => {
+    const card = v.cells[y][x].placed!.card.kind
+    const next = structuredClone(v)
+    next.cells[y][x].placed!.piece = P(kind)
+    setV(next)
+    const ok = kind === 'farmer' && card === 'farm'
+    if (ok) {
+      setRice((r) => r + 1)
+      onDone()
+    }
+    setLast({
+      key: k(x, y),
+      ok,
+      text: ok
+        ? '農地＋農民！ お米ポイントを1つゲット'
+        : kind === 'merchant'
+          ? '農地に商人……農民ではないので、お米はもらえません'
+          : '直線に農民……農地ではないので、お米はもらえません',
+    })
+  }
+  const box = 'flex h-14 w-14 items-center justify-center rounded-[3px] bg-black/25 sm:h-16 sm:w-16'
+  return (
+    <div className="flex flex-col gap-2 text-white">
+      {/* 式で見せる */}
+      <div className="flex items-center justify-center gap-2 rounded-[3px] bg-black/20 py-2 text-2xl font-black">
+        <span className="flex flex-col items-center gap-0.5">
+          <span className={box}>
+            <CardImage card={{ id: 0, kind: 'farm' }} className="w-full rounded-[2px]" />
+          </span>
+          <span className="text-[11px]">農地カード</span>
+        </span>
+        <span>＋</span>
+        <span className="flex flex-col items-center gap-0.5">
+          <span className={box}>
+            <PieceImage piece={{ id: 0, kind: 'farmer' }} className="w-[85%]" showStrength={false} />
+          </span>
+          <span className="text-[11px]">農民コマ</span>
+        </span>
+        <span>＝</span>
+        <span className="flex flex-col items-center gap-0.5">
+          <span className={box}>
+            <Rice className="w-[80%]" />
+          </span>
+          <span className="text-[11px]">お米 1つ</span>
+        </span>
+      </div>
+      <VillageBoard
+        village={v}
+        targets={new Set(pieceCells(v).map(([x, y]) => k(x, y)))}
+        freshPieces={last ? new Set([last.key]) : undefined}
+        labels={{ '6,3': '農地', '7,2': '農地', '6,2': '直線', '7,3': '館' }}
+        onCell={place}
+      />
+      <HandRow label="置くコマ">
+        {(['farmer', 'merchant'] as const).map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setKind(p)}
+            className={`flex w-16 flex-col items-center gap-0.5 rounded-[3px] p-1 transition-all duration-200 ${kind === p ? '-translate-y-1 bg-white shadow-lg ring-3 ring-amber-500' : 'bg-white/50'}`}
+          >
+            <PieceImage piece={{ id: 0, kind: p }} className="w-11" />
+            <span className="text-[10px] font-bold">{p === 'farmer' ? '農民' : '商人'}</span>
+          </button>
+        ))}
+        <span className="ml-auto flex items-center gap-1.5">
+          <Rice className="w-8" />
+          <span className="text-2xl font-black tabular-nums">{rice}</span>
+        </span>
+      </HandRow>
+      {last && (
+        <Note key={last.key + last.text} tone={last.ok ? 'good' : 'bad'}>
+          {last.text}
+        </Note>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          setV(init())
+          setRice(0)
+          setLast(null)
+        }}
+        className="self-start rounded-[3px] bg-white/15 px-3 py-1.5 text-xs font-bold"
+      >
+        ↻ 置きなおす
+      </button>
     </div>
   )
 }
@@ -493,10 +609,28 @@ export const FULL_STEPS: Step[] = [
   },
   {
     chapter: 3,
-    title: '② 農地に農民で、お米ポイント',
-    body: ['コマは自分の村の**カードの上**に置きます。', '**農地に農民**を置いたら、**お米ポイント**を1つもらえます。特殊効果カードに使えて、最後まで残せば**1つ1点**です。'],
-    maro: ['**農地に農民**を住まわせると、**お米ポイント**がもらえるまろ！', 'お米は特殊効果に使ってもよし、取っておけば**1つ1点**まろ。'],
-    task: '農民コマを農地に置こう',
+    title: '② コマをカードの上に置く',
+    body: [
+      '取ったコマは、自分の村の**カードの上**に置きます。**1枚のカードにコマは1つ**まで。',
+      'どのコマをどのカードにのせるかで、得点が変わります（くわしくは「得点」で）。',
+    ],
+    maro: ['コマは村の**カードの上**に住まわせるまろ。**1枚に1人**までまろ。', '商人は**十字の道**が好きまろ。どこに置くか、やってみるまろ！'],
+    task: 'コマをカードの上に置こう',
+    praise: '住まいが決まったまろ！',
+    Stage: PieceOnCardStage,
+  },
+  {
+    chapter: 3,
+    title: '農地＋農民で、お米ポイント',
+    body: [
+      '**農地カード**の上に**農民コマ**を置いたときだけ、**お米ポイント**を1つもらえます。',
+      '農地に**商人**、**直線**などに農民では、もらえません。お米は**特殊効果カード**に使えて、最後まで残せば**1つ1点**です。',
+    ],
+    maro: [
+      'ここは通常版だけのきまりまろ。**農地**に**農民**を置くと、**お米ポイント**がもらえるまろ！',
+      '農地に商人、道に農民ではダメまろ。いろいろ置いて比べてみるまろ！',
+    ],
+    task: '農地に農民を置いて、お米をもらおう',
     praise: '豊作まろ〜！',
     Stage: RiceStage,
   },
